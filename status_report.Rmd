@@ -1,0 +1,746 @@
+---
+title: "Status Study Report"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(zipcodeR)
+library(ggvenn)
+# remotes::install_github("davidsjoberg/ggsankey")
+library(ggsankey)
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r helper functions and data}
+# prolific codes in surveys were not properly assigned, so manually replace them
+participant_code_replacements <- function(x, y) {
+  # x is the prolific ID that we use to replace participant codes
+  # y is the given participant code
+  case_when(
+    x == '56e130548b1c33000a388671' ~ 'VATZ46',
+    x == '6287f4819c5fc8c4d48cc885' ~ 'AVX9QE',
+    x == '601d69a993d94008fb2b25dc' ~ 'YWTGUB',
+    x == '650464007006929ee0cd9695' ~ 'ZWTG94',
+    x == '614ce6a7a33bac955957f7a6' ~ 'TPZZQA',
+    x == '6317511c1dd0acb82cf4b131' ~ 'VQWK3M',
+    x == '5e3ae8e5ebfb032f9058ef33' ~ 'KB39HV',
+    x == '6554d0515dc2a90a0f6b3ae3' ~ 'VNPHMU',
+    x == '5ec59e86c9569f5e8000717b' ~ 'ZN3EYY',
+    x == '5ee834d45f0f48129a79b683' ~ 'UGED4M',
+    .default = y
+  ) %>% return()
+}
+# drop these participant codes -- clarify _why_ with Austin
+participant_code_drops <- c('a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc')
+
+# affective numeric values
+numeric_affect <- function(x) case_when(
+        x == "Very slightly or not at all" ~ 0,
+        x == "A little" ~ 1,
+        x == "Moderately" ~ 2,
+        x == "Quite a bit" ~ 3,
+        x == "Extremely" ~ 4, 
+        .default = NA)
+calculate_affect <- function(x, affect_cols) {
+  # x : data frame/tibble
+  # affect_cols : list of characters denoting which columns to use
+  
+  x %>%
+    select(paste0('panas_', affect_cols)) %>%
+    rowSums(na.rm = TRUE) %>%
+    return()
+}
+
+get_state_names <- function(x) {
+  case_when(x == "AL" ~ "Alabama",
+            x == "AK" ~ "Alaska",
+            x == "AZ" ~ "Arizona",
+            x == "AR" ~ "Arkansas",
+            x == "CA" ~ "California",
+            x == "CO" ~ "Colorado",
+            x == "CT" ~ "Connecticut",
+            x == "DE" ~ "Delaware",
+            x == "FL" ~ "Florida",
+            x == "GA" ~ "Georgia",
+            x == "HI" ~ "Hawaii",
+            x == "ID" ~ "Idaho",
+            x == "IL" ~ "Illinois",
+            x == "IN" ~ "Indiana",
+            x == "IA" ~ "Iowa",
+            x == "KS" ~ "Kansas",
+            x == "KY" ~ "Kentucky",
+            x == "LA" ~ "Louisiana",
+            x == "ME" ~ "Maine",
+            x == "MD" ~ "Maryland",
+            x == "MA" ~ "Massachusetts",
+            x == "MI" ~ "Michigan",
+            x == "MN" ~ "Minnesota",
+            x == "MS" ~ "Mississippi",
+            x == "MO" ~ "Missouri",
+            x == "MT" ~ "Montana",
+            x == "NE" ~ "Nebraska",
+            x == "NV" ~ "Nevada",
+            x == "NH" ~ "New Hampshire",
+            x == "NJ" ~ "New Jersey",
+            x == "NM" ~ "New Mexico",
+            x == "NY" ~ "New York",
+            x == "NC" ~ "North Carolina",
+            x == "ND" ~ "North Dakota",
+            x == "OH" ~ "Ohio",
+            x == "OK" ~ "Oklahoma",
+            x == "OR" ~ "Oregon",
+            x == "PA" ~ "Pennsylvania",
+            x == "RI" ~ "Rhode Island",
+            x == "SC" ~ "South Carolina",
+            x == "SD" ~ "South Dakota",
+            x == "TN" ~ "Tennessee",
+            x == "TX" ~ "Texas",
+            x == "UT" ~ "Utah",
+            x == "VT" ~ "Vermont",
+            x == "VA" ~ "Virginia",
+            x == "WA" ~ "Washington",
+            x == "WV" ~ "West Virginia",
+            x == "WI" ~ "Wisconsin",
+            x == "WY" ~ "Wyoming",
+            x == "DC" ~  "District of Columbia", 
+            x == "PR" ~  "Puerto Rico") %>%
+    return()
+}
+```
+
+# Notes for Austin
+- All the 3rd order variables have NA values
+- Why do we drop the following codes? `'a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc'`
+- Survey completion time: we were using `Duration (in seconds)_pre + Duration (in seconds)_post` to calculate survey completion time, but we should be using `intake` and `pretreatment` survey completion times
+
+
+# Attrition
+```{r load attrition data, message = FALSE, warning = FALSE, include = FALSE}
+# read raw data
+intake <- read_csv("./Status Study 12-12-selected/intake.csv")
+pretreat <- read_csv("./Status Study 12-12-selected/pre.csv")
+posttreat <- read_csv("./Status Study 12-12-selected/post.csv")
+
+total_n <- nrow(intake)
+consent_drop <- intake %>% filter(Consent == 'No, I do NOT consent') %>% nrow()
+jive_drop <-
+  intake %>% filter((platforms_jive == 'A lot') |
+                      (intake.platforms_jive == 'Some')) %>% nrow()
+device_drop <- intake %>%
+  filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
+  nrow()
+
+download_drop <- intake %>%
+  filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
+  nrow()
+
+image_drop <- intake %>%
+  filter(screen_image != 3.0) %>%
+  filter(!is.na(screen_image)) %>%
+  nrow()
+
+age_drop <- intake %>%
+  filter(age < 18) %>%
+  filter(!is.na(age)) %>% 
+  nrow()
+
+us_drop <- intake %>%
+  filter(state == "I do not reside in the United States") %>%
+  nrow()
+
+forced_attrit <- consent_drop + jive_drop + device_drop + download_drop + image_drop + age_drop + us_drop
+
+intake_completes <- intake %>%
+  filter(!is.na(participant_code))
+
+total_attrit_intake <- total_n - intake_completes - forced_attrit
+
+
+
+```
+
+## Attrition through full study
+```{r attrition through study, echo=TRUE, message=FALSE, warning=FALSE}
+
+# sankey diagram should have columns x, node, next_x, next_node
+nodes <- c(
+  'Started intake',
+  'Finished intake',
+  'Did not finish intake',
+  'Dropped during download',
+  'Started pre-treat' ,
+  'Finished pre-treat' ,
+  'Did not finish pre-treat' ,
+  'Started post-treat' ,
+  'Lost during newsfeed',
+  'Finished post-treat')
+
+sankey_df <- tribble(
+  ~'start', ~'end', ~'n',
+  'Started intake', , total_n,
+  'Started intake', 'Finished intake', intake_completes,
+  'Started intake', 'Did not finish intake', total_n - intake_completes,
+  'Finished intake', 'Dropped during download', attrit_intake_pretreat,
+  'Finished intake', 'Started pre-treat', pretreat_n
+)
+
+
+
+```
+
+
+# Data Quality Checks
+```{r load data, message=FALSE, warning=FALSE, include=FALSE}
+# read in intake, pre-treatment, and post-treatment survey responses
+intake <- read_csv('./Status Study 12-12-selected/intake.csv') %>%
+  # filter(!is.na(participant_code)) %>% # drop participants without a participant code
+  mutate(participant_code = participant_code_replacements(PROLIFIC_PID, participant_code)) %>%
+  mutate(participant_code = str_to_lower(participant_code))
+  
+pretreat <- read_csv('./Status Study 12-12-selected/pre.csv') %>%
+  mutate(treatment = str_ends(treatment_arm, 'treat'))
+
+posttreat <- read_csv('./Status Study 12-12-selected/post.csv') %>%
+  mutate(third_order = rowSums(select(., starts_with('third_order')), na.rm = TRUE)) %>%
+  # turn PANAS variables into numbers
+  mutate_at(vars(starts_with('panas_')), numeric_affect) %>%
+  mutate(panas_neg = calculate_affect(., c('hostile', 'ashamed', 'upset', 'afraid'))) %>%
+  mutate(panas_pos = calculate_affect(., c('active', 'attentive', 'alert', 'determined', 'inspired'))) %>%
+  mutate(panas = panas_pos - panas_neg)
+
+survey_df <- posttreat %>%
+  inner_join(pretreat, by = 'participant_code', suffix = c('_post', '_pre')) %>%
+  inner_join(intake %>% filter(!is.na(participant_code)), # drop participants without a participant code
+             by = 'participant_code') %>%
+  # drop participants in the code drop list
+  filter(!(participant_code %in% participant_code_drops)) %>%
+  # make a variable for assigned SMA condition
+  mutate(condition = case_when(
+    str_ends(treatment_arm, 'pc') ~ 'pure_control',
+    str_ends(treatment_arm, 'treat') ~ 'treat',
+    str_detect(treatment_arm, 'control') ~ 'control',
+    .default = NA
+  ))
+
+# make a new race variable
+survey_df <- survey_df %>% 
+  mutate(
+    race_new = case_when(
+    race == 'Hispanic,White' ~ 'Hispanic',
+    race == 'Something else' ~ 'Mixed/other',
+    str_count(race, ',') > 0 ~ 'Mixed/other',
+    .default = race))
+
+# make a new education variable
+survey_df <- survey_df %>% 
+  select(participant_code, starts_with('educ_')) %>%
+  pivot_longer(cols = starts_with('educ_')) %>%
+  filter(!is.na(value)) %>%
+  select(-name) %>%
+  rename(new_educ = value) %>%
+  inner_join(survey_df, by = 'participant_code') 
+
+# convert intellectual humility to numeric
+survey_df <- survey_df %>%
+  mutate(across(contains('_ih_'), 
+                .fns = function(x) {
+                  case_match(x,
+                            'Not at all well'~ 0,
+                            'Not too well'~ 1,
+                            'Somewhat well'~ 2,
+                            'Very well'~ 3,
+                            'Extremely well'~ 4)}
+                )
+         ) %>%
+  rowwise() %>%
+  mutate(pre_ih = sum(across(.cols = starts_with('pre_ih_')), na.rm = TRUE),
+         post_ih = sum(across(.cols = starts_with('post_ih_')), na.rm = TRUE),
+         delta_ih = post_ih - pre_ih,
+         pre_ih_binary = pre_ih/6 >= 3)
+
+# calculate affective polarization
+survey_df <- survey_df %>%
+  mutate(
+    same_therm_change = post_therm_1 - pre_therm_1, # change in own party ideals
+    diff_therm_change = post_therm_2 - pre_therm_2, # change in out-party feelings,
+    affective_polarization = (same_therm_change - diff_therm_change)/100
+  )
+
+# calculate moderation of ideals
+survey_df <- survey_df %>%
+  mutate(across(contains('_policy_'),
+                .fns = function(x) case_match(x,
+                                              'Strongly agree' ~ 3, 
+                                              'Agree' ~ 2,
+                                              'Somewhat agree' ~ 1, 
+                                              'Neither agree nor disagree' ~ 0, 
+                                              'Disagree' ~ 1,
+                                              'Somewhat disagree' ~ 2,
+                                              'Strongly disagree' ~ 3))) %>%
+  mutate(
+    extremity_pre = case_when(
+      str_detect(treatment_arm, 'gc') ~ pre_policy_gc,
+      str_detect(treatment_arm, 'imm') ~ pre_policy_imm
+    ),
+    extremity_post = case_when(
+      str_detect(treatment_arm, 'gc') ~ post_policy_1,
+      str_detect(treatment_arm, 'imm') ~ post_policy_2
+    ),
+    extremity_post_less_pre = extremity_post - extremity_pre
+  )
+
+# convert platform descriptions to numeric values
+survey_df <- survey_df %>%
+  mutate(across(contains('desc_platform_'),
+         .fns = function(x) {case_match(x,
+                                       "Not at all"~ 1,
+                                       "Very little"~ 2,
+                                       "Some"~ 3,
+                                       "Quite a bit"~ 4,
+                                       "A great deal"~ 5,
+                                       .default = NA)}))
+
+# convert social media platform usage to numeric
+survey_df <- survey_df %>%
+  mutate(across(starts_with('platforms_'),
+                .fns = function(x) {
+                  case_when(
+                            x == 'A lot' ~ 2, 
+                            x == 'Some' ~ 1, 
+                            x == 'Not at all' ~ 0,
+                             .default = NA)
+                })
+         ) %>%
+  mutate(social_media_sum = sum(across(.cols = starts_with('platforms_'))), na.rm = TRUE) %>%
+  mutate(
+         social_media_high  = (social_media_sum >= 5)
+         )
+
+```
+
+## Participant Selection
+### Survey Completion Time
+```{r survey completion time, message=FALSE, warning=FALSE}
+survey_df$pretreatment_intake_time <- survey_df$`Duration (in seconds)` + survey_df$`Duration (in seconds)_pre`
+survey_df$speeder <- survey_df$pretreatment_intake_time <= median(survey_df$pretreatment_intake_time)/4 %>%
+  replace_na(FALSE)
+survey_df %>%
+  ggplot() +
+  geom_histogram(aes(x = pretreatment_intake_time), alpha = 0.5) +
+  scale_x_log10() +
+  geom_vline( aes(xintercept = median(pretreatment_intake_time)/2, linetype = 'Median/2')) +
+  geom_vline( aes(xintercept = median(pretreatment_intake_time)/4, linetype = 'Median/4')) +
+  labs(
+    x = 'Pre-treatment and intake completion time (in sec)',
+    y = 'Count',
+    linetype = 'Threshold',
+    title = 'Survey Completion Time',
+    subtitle = paste0('#Speeders (Time <= Median/4): ', sum(survey_df$speeder))
+  )
+  
+sum(survey_df$pretreatment_intake_time <= median(survey_df$pretreatment_intake_time)/2)
+```
+
+## Zip code/state matches
+```{r zip code/state matches, message = FALSE, warning = FALSE}
+# survey_df$state_from_zip <- 
+survey_df <- survey_df %>%
+  mutate(zip = case_when(
+    nchar(zip) == 4 ~ paste0('0', zip),
+    .default = zip
+  ))
+
+
+survey_df <- zip_code_db %>%
+  select(zipcode, state) %>%
+  rename(zip_state = state) %>%
+  right_join(survey_df, by = c('zipcode' = 'zip')) %>%
+  mutate(
+    zip_state = 
+      case_when(
+        zipcode == '77407' ~ "TX",
+        zipcode == '85756' ~ "AZ",
+        zipcode == '49519' ~ "MI",
+        zipcode == "34638" ~ "FL",
+        zipcode == "25405" ~ "WV",
+        zipcode == "10065" ~ "NY",
+        zipcode == "89183" ~ "NV",
+        zipcode == "89178" ~ "NV",
+        zipcode == "85143" ~ "AZ",
+        zipcode == "85140" ~ "AZ",
+        zipcode == "32163" ~ "FL",
+        zipcode == "85119" ~ "AZ",
+        zipcode == "29486" ~ "SC",
+        zipcode == "85142" ~ "AZ",
+        zipcode == "60169" ~ "IL",
+        zipcode == "98391" ~ "WA",
+        zipcode == "80923" ~ "CO",
+        # https://researchmaniacs.com/ZipCodes/4/Where-is-Zip-Code-46907.html
+        zipcode == "46907" ~ "IN",
+        zipcode == "10486" ~ "NY",
+        zipcode == "91760" ~ "CA",
+        zipcode == "00000" ~ NA,
+        zipcode == "46343" ~ "IN",
+        zipcode == "90289" ~ "CA",
+        zipcode == "90268" ~ "CA",
+        .default = zip_state)
+  ) %>%
+  mutate(state_full = get_state_names(zip_state))
+
+survey_df <- survey_df %>%
+  mutate(pass_zip_check = (survey_df$state_full == survey_df$state)) %>%
+  mutate(pass_zip_check = replace_na(pass_zip_check, replace = FALSE))
+
+
+```
+
+### Bonus word check
+```{r bonus check, echo=FALSE, message=FALSE, warning=FALSE}
+survey_df$correct_bonus <- survey_df$password %>%
+  str_to_lower() %>%
+  str_detect('win') %>%
+  replace_na(FALSE)
+```
+
+```{r venn diagram, message = FALSE, warning = FALSE, echo = FALSE}
+ggplot(survey_df) +
+  geom_venn(aes(A = !speeder, B = pass_zip_check, C = correct_bonus), show_percentage = FALSE,
+            set_names = c('Did not speed', 'Zip code state = Reported state', 'Correct bonus word'),
+            fill_color = c('#3b528b', '#21918c', '#5ec962')) +
+  scale_fill_viridis_b() +
+  theme_classic() +
+  theme(axis.text.x=element_blank(), 
+      axis.ticks.x=element_blank(), 
+      axis.text.y=element_blank(), 
+      axis.ticks.y=element_blank(),
+      axis.line.x = element_blank(),
+      axis.line.y = element_blank()) 
+```
+```{r participant check, message = FALSE, warning = FALSE, echo = FALSE}
+survey_df %>%
+  group_by(!speeder, pass_zip_check, correct_bonus) %>%
+  count() %>%
+  rename(`Did not speed` = `!speeder`,
+         `Zip code state = Reported state` = pass_zip_check,
+         `Correct bonus word` = correct_bonus) %>%
+  pander::pander()
+```
+
+
+## Demographic/Balance checks
+### Age
+```{r demog and balance checks, echo=FALSE, message=FALSE, warning=FALSE}
+
+demogs_plot <- function(col, factor_list = NULL, title = NA) {
+  if(!is.null(factor_list)) {
+    survey_df <- survey_df %>%
+      mutate_at(.vars = c(col), .funs = function(x) factor(x, levels = factor_list))
+  }
+  if(col == 'age') {
+  p <- ggplot(survey_df) +
+      geom_histogram(aes_string(x = col, fill = 'condition'), position = 'identity', alpha = 0.5, stat = 'count') 
+  p_value <- min(ks.test(survey_df[survey_df$condition == 'treat', ]$age,
+                         survey_df[survey_df$condition == 'control', ]$age)$p.value,
+                 ks.test(survey_df[survey_df$condition == 'treat', ]$age,
+                         survey_df[survey_df$condition == 'pure_control',]$age)$p.value,
+                 ks.test(survey_df[survey_df$condition == 'pure_control',]$age,
+                         survey_df[survey_df$condition == 'control',]$age)$p.value
+                 )
+  }
+  else {
+    p <- ggplot(survey_df) +
+      geom_histogram(aes_string(x = col, fill = 'condition'), position = 'dodge2', stat = 'count')
+    p_value <- survey_df %>% 
+      group_by(condition, (!!as.symbol(col))) %>% 
+      count() %>% 
+      pivot_wider(id_cols = 'condition', names_from = col, values_from = 'n') %>%
+      ungroup() %>%
+      column_to_rownames('condition') %>%
+      as.matrix() %>%
+      chisq.test() %>%
+      .$p.value
+  }
+  p <- p +
+    theme(legend.position = 'bottom',
+          axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = paste0('Histogram of `', title, '`'),
+         subtitle = paste0('#Missing values: ', is.na(survey_df[col]) %>% sum()),
+         caption = paste0('Min p-value from KS/Chi^2 test between groups: ', round(p_value, 4)),
+         x = title)
+  return(p)
+}
+
+demogs_plot('age', title = 'Age')
+demogs_plot('pid3', c('Democrat', 'Independent', 'Republican', 'Other'), title = 'Political Identity')
+demogs_plot('ideo7', 
+            c('Extremely liberal', 'Liberal', 'Somewhat liberal', 'Moderate or middle of the road', 'Somewhat conservative', 'Conservative', 'Extremely conservative'),
+            'Ideology')
+
+demogs_plot('new_educ', c('Less than high school', 
+                          'High school graduate or equivalent (GED)',
+                          'Some college but no degree',
+                          'Associate degree in college',
+                          'Bachelor’s degree',
+                          'Post-graduate degree'),
+            'Education')
+```
+# Attrition Checks
+```{r attrition, echo=FALSE, include=FALSE, warnings=FALSE, error=FALSE}
+intake_w_nas <- read_csv('./Status Study 12-12-selected/intake.csv') %>%
+  mutate(participant_code = participant_code_replacements(PROLIFIC_PID, participant_code)) %>%
+  mutate(participant_code = str_to_lower(participant_code))
+pretreat_w_nas <- read_csv('./Status Study 12-12-selected/pre.csv')
+posttreat_w_nas <- read_csv('./Status Study 12-12-selected/post.csv')
+
+
+
+intake_w_nas %>%
+  mutate(consent_drop = (Consent == 'No, I do NOT consent'),
+         jive_drop = (platforms_jive == 'A lot') | (platforms_jive == 'Some'),
+         device_drop = device == 'Something else',
+         download_drop = (download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT'),
+         image_drop = (screen_image != 3),
+         age_drop = (age < 18),
+         us_drop = (state == 'I do not reside in the United States'),
+         intake_complete = !is.na(participant_code)) %>%
+  group_by(across(ends_with('_drop'))) %>%
+  count() %>%
+  ungroup() %>%
+  pivot_longer(cols = -n) %>%
+  filter(!is.na(value))
+
+```
+
+
+
+# Main Hypothesis Tests
+```{r main ttest code, message=FALSE, warning=FALSE}
+main_hypothesis_test <- function(df,
+                                 outcome,
+                                 main_condition = 'treat',
+                                 contrast_condition = 'control',
+                                 display_plot = FALSE,
+                                 title = '',
+                                 return_object = FALSE) {
+  # isolate data for main group and contrast group
+  outcome_main_group <- df %>%
+    filter(condition == main_condition) %>% 
+    .[outcome] %>% 
+    drop_na() %>% 
+    pull(.)
+  
+  outcome_contrast_group <- df %>% 
+    filter(condition == contrast_condition) %>% 
+    .[outcome] %>% 
+    drop_na() %>% 
+    pull(.)
+  
+  # run t test comparing these two groups
+  ttest_results <- t.test(
+    x = outcome_main_group,
+    y = outcome_contrast_group,
+    alternative = 'two.sided',
+    var.equal = FALSE
+  )
+  # ttest_estimate <- ttest_results$
+  ttest_pvalue <- ttest_results$p.value
+  ttest_cohens_d <- effsize::cohen.d(outcome_main_group,
+                                     outcome_contrast_group)$estimate
+  
+  # make ttest plot
+  n_stars <- ''
+  if(ttest_pvalue < 0.05) { n_stars <- '*'}
+  else if(ttest_pvalue < 0.01) { n_stars <- '**'}
+  else if(ttest_pvalue < 0.001) { n_stars <- '***' }
+  p <- ggplot() +
+    geom_bar(aes(x = outcome_main_group, y = ..prop.., fill = main_condition), alpha = 0.5, position = 'identity') +
+    geom_bar(aes(x = outcome_contrast_group, y = ..prop.., fill = contrast_condition), alpha = 0.5, position = 'identity') +
+    geom_density(aes(x = outcome_main_group, fill = main_condition), alpha = 0.5, position = 'identity') +
+    geom_density(aes(x = outcome_contrast_group, fill = contrast_condition), alpha = 0.5, position = 'identity') +
+    geom_vline(aes(xintercept = mean(outcome_main_group), linetype = main_condition), linewidth = 1) +
+    geom_vline(aes(xintercept = mean(outcome_contrast_group), linetype = contrast_condition), linewidth = 1) +
+    labs(x = outcome,
+         y = 'density',
+         title = paste0(title, ': ', outcome, n_stars),
+         subtitle = paste0('(p=', round(ttest_pvalue, 3), ', D=', round(ttest_cohens_d, 3), ')'),
+         fill = 'Contrast groups',
+         linetype = 'Contrast groups'
+         )
+  
+  if(ttest_pvalue < 0.05) {
+    p <- p + 
+      theme(plot.title = element_text(face = 'bold'),
+            plot.subtitle = element_text(face = 'bold'))
+  }
+return_list <- list('contrast' = paste(main_condition, 'vs', contrast_condition),
+                    'ttest' = ttest_results,
+                    'p.value' = ttest_pvalue,
+                    'cohen.d' = ttest_cohens_d,
+                    'plot' = p)
+  # if you should display the plot, make the plot and display it
+  if(display_plot) print(p)
+  if(return_object) return(return_list)
+}
+
+subgroup_hypothesis_test <- function(df,
+                                 outcome,
+                                 subgroup_col,
+                                 subgroup_rhs,
+                                 main_condition = 'treat',
+                                 contrast_condition = 'control',
+                                 display_plot = FALSE,
+                                 title = '',
+                                 return_object = FALSE) {
+  result <- main_hypothesis_test(
+    df %>% filter(.data[[subgroup_col]] == subgroup_rhs),
+    outcome,
+    main_condition,
+    contrast_condition,
+    display_plot,
+    title = paste0(title, subgroup_col, '=', subgroup_rhs),
+    return_object = TRUE
+  )
+  if (return_object) return(result)
+}
+
+subgroup_cols <- c('pre_ih_binary',
+                   'pre_ih_binary',
+                   'social_media_high',
+                   'social_media_high',
+                   'pid3',
+                   'pid3')
+subgroup_rhss <- list(1, 0, 1, 0, 'Democrat', 'Republican')
+
+multiple_subgroups_htest <- function(df,
+                                 outcome,
+                                 subgroup_cols,
+                                 subgroup_rhss,
+                                 main_condition = 'treat',
+                                 contrast_condition = 'control',
+                                 display_plot = FALSE,
+                                 title = '',
+                                 return_object = FALSE) 
+  {
+  row_names <- paste0(subgroup_cols, '=', subgroup_rhss)
+  subgroup_results <- data.frame('contrast' = rep(NA, length(row_names)),
+                                 'ttest' = rep(NA, length(row_names)),
+                                 'p.value' = rep(NA, length(row_names)),
+                                 'cohen.d' = rep(NA, length(row_names)),
+                                 'plot' = rep(NA, length(row_names)),
+                                 row.names = paste0(subgroup_cols, '=', subgroup_rhss))
+  for(index in 1:length(subgroup_cols)) {
+    sg_result <- subgroup_hypothesis_test(survey_df,
+                           outcome = outcome,
+                           subgroup_col = subgroup_cols[index],
+                           subgroup_rhs = subgroup_rhss[index],
+                           display_plot = display_plot,
+                           return_object = TRUE)
+    subgroup_results[paste0(subgroup_cols[index], '=', subgroup_rhss[index]), ] <- sg_result
+  }
+  subgroup_results$outcome <- outcome
+  subgroup_results$subgroup <- rownames(subgroup_results)
+  rownames(subgroup_results) <- NULL
+  if(return_object) return(subgroup_results)
+}
+```
+
+
+
+## Hypothesis 1A: experience less negative emotions
+```{r h1a, echo=FALSE, warning=FALSE}
+main_hypothesis_test(survey_df, 'panas_neg', display_plot = TRUE, title = 'All participants', return_object = FALSE)
+```
+
+## Hypothesis 1B: experience more positive emotions
+```{r h1b, echo=FALSE, warning=FALSE}
+main_hypothesis_test(survey_df, 'panas_pos', display_plot = TRUE, title = 'All participants', return_object = FALSE)
+```
+
+## Hypothesis 1C: experience more positive and less negative emotions
+```{r h1c, echo=FALSE, warning=FALSE}
+main_hypothesis_test(survey_df, 'panas', display_plot = TRUE, title = 'All participants', return_object = FALSE)
+```
+
+## Hypothesis 2: report greater increases in their intellectual humility
+```{r h2, echo=FALSE, warning=FALSE}
+main_hypothesis_test(survey_df, 'delta_ih', display_plot = TRUE, title = 'All participants', return_object = FALSE)
+```
+
+## Hypothesis 3: produce more intellectually humble content
+
+## Hypothesis 4: engage more with intellectually humble content
+
+## Hypothesis 5: experience a greater reduction in their affective polarization
+```{r h5, echo=FALSE, warning=FALSE}
+main_hypothesis_test(survey_df, 'affective_polarization', display_plot = TRUE, title = 'All participants', return_object = FALSE)
+```
+
+## Hypothesis 6: moderate their issue positions to a greater degree
+```{r h6, echo=FALSE, warning=FALSE}
+main_hypothesis_test(survey_df, 'extremity_post_less_pre', display_plot = TRUE, title = 'All participants', return_object = FALSE)
+```
+
+
+## Subgroup Analyses
+```{r echo=TRUE, warning=FALSE}
+
+subgroup <- lapply(X = list('panas_neg', 'panas_pos', 'panas', 'delta_ih', 'affective_polarization', 'extremity_post_less_pre'),
+       function(x) multiple_subgroups_htest(
+  df = survey_df,
+  outcome = x,
+  subgroup_cols = c(
+    'pre_ih_binary',
+    'pre_ih_binary',
+    'social_media_high',
+    'social_media_high',
+    'pid3',
+    'pid3'
+  ),
+  subgroup_rhss = list(1, 0, 1, 0, 'Democrat', 'Republican'),
+  main_condition = 'treat',
+  contrast_condition = 'control',
+  display_plot = FALSE,
+  title = '',
+  return_object = TRUE
+)) %>%
+  bind_rows()
+
+subgroup %>%
+  filter(p.value <= 0.05) %>%
+  select(p.value, cohen.d, outcome, subgroup) %>%
+  mutate(stars = case_when(
+    p.value <= 0.001 ~ '***',
+    p.value <= 0.01 ~ '**',
+    p.value <= 0.05 ~ '*'
+  )) %>%
+  mutate(cohen.d = paste0(round(cohen.d, 3), stars)) %>%
+  pivot_wider(id_cols = 'subgroup', names_from = 'outcome', values_from = 'cohen.d') %>%
+  column_to_rownames('subgroup') %>%
+  pander::pander(caption = 'Rows represent subgroups, columns represent outcome, and entries represent effect size. p<0.05*, p<0.01**, p<0.001***')
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
