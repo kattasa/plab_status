@@ -121,138 +121,7 @@ get_state_names <- function(x) {
 - Why do we drop the following codes? `'a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc'`
 - Survey completion time: we were using `Duration (in seconds)_pre + Duration (in seconds)_post` to calculate survey completion time, but we should be using `intake` and `pretreatment` survey completion times
 - Gold star $n$: 835
-
-
-# Attrition
-```{r load attrition data, message = FALSE, warning = FALSE, include = FALSE}
-# read raw data
-intake <- read_csv("./Status Study 12-12-selected/intake.csv")
-pretreat <- read_csv("./Status Study 12-12-selected/pre.csv")
-posttreat <- read_csv("./Status Study 12-12-selected/post.csv")
-
-total_n <- nrow(intake)
-consent_drop <- intake %>% filter(Consent == 'No, I do NOT consent') %>% nrow()
-jive_drop <-
-  intake %>% filter((platforms_jive == 'A lot') |
-                      (platforms_jive == 'Some')) %>% nrow()
-device_drop <- intake %>%
-  filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
-  nrow()
-
-download_drop <- intake %>%
-  filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
-  nrow()
-
-image_drop <- intake %>%
-  filter(screen_image != 3.0) %>%
-  filter(!is.na(screen_image)) %>%
-  nrow()
-
-age_drop <- intake %>%
-  filter(age < 18) %>%
-  filter(!is.na(age)) %>% 
-  nrow()
-
-us_drop <- intake %>%
-  filter(state == "I do not reside in the United States") %>%
-  nrow()
-
-forced_attrit <- consent_drop + jive_drop + device_drop + download_drop + image_drop + age_drop + us_drop
-
-intake_completes <- intake %>%
-  filter(!is.na(participant_code)) %>%
-  nrow()
-
-total_attrit_intake <- total_n - intake_completes - forced_attrit
-
-pretreat_n <- pretreat %>% nrow()
-attrit_intake_pretreat <- intake_completes - pretreat_n
-
-pretreat_completes <- pretreat %>%
-  filter(!is.na(`Q111_Page Submit`)) %>%
-  nrow()
-
-posttreat_n <- posttreat %>% nrow()
-
-attrit_pre_post <- pretreat_completes - posttreat_n
-
-posttreat_completes <- posttreat %>%
-  filter(Progress >= 93) %>%
-  nrow()
-
-
-```
-
-## Attrition through full study
-```{r attrition through study, echo=TRUE, message=FALSE, warning=FALSE, results='asis'}
-
-# sankey diagram should have columns x, node, next_x, next_node
-nodes <- tribble(
-  ~node, ~stage,
-  'Started intake', 1,
-  'Finished intake', 2,
-  'Did not finish intake', 2,
-  'Dropped during download', 3,
-  'Started pre-treat' , 3,
-  'Finished pre-treat' , 4,
-  'Did not finish pre-treat' , 4,
-  'Started post-treat' , 5,
-  'Lost during newsfeed', 5,
-  'Finished post-treat', 6
-  ) %>%
-  rownames_to_column(var = 'node_index') %>%
-  mutate(node_index = as.numeric(node_index) - 1) %>%
-  mutate(stage = as.character(stage))
-
-sankey_df <- tribble(
-  ~'start', ~'end', ~'n',
-  # 'Started intake', NA, total_n,
-  'Started intake', 'Finished intake', intake_completes,
-  'Started intake', 'Did not finish intake', total_n - intake_completes,
-  'Finished intake', 'Dropped during download', attrit_intake_pretreat,
-  'Finished intake', 'Started pre-treat', pretreat_n,
-  'Started pre-treat', 'Finished pre-treat', pretreat_completes,
-  'Started pre-treat', 'Did not finish pre-treat', pretreat_n - pretreat_completes,
-  'Finished pre-treat', 'Started post-treat', posttreat_n,
-  'Finished pre-treat', 'Lost during newsfeed', pretreat_completes,
-  'Started post-treat', 'Finished post-treat', posttreat_completes,
-  # 'Finished post-treat', NA, NA
-) %>%
-  left_join(nodes, by = c('start' = 'node')) %>%
-  rename('start_index' = 'node_index') %>%
-  left_join(nodes, by = c('end' = 'node')) %>%
-  rename('end_index' = 'node_index'
-  ) %>%
-  mutate(n = 1)
-
-sankey_plot <- networkD3::sankeyNetwork(
-  Links = sankey_df,
-  Nodes = nodes,
-  Source = "start_index",
-  Target = "end_index",
-  Value = "n",
-  units = "TWh",
-  NodeID = 'node',
-  NodeGroup = 'stage',
-  fontSize = 20,
-  nodeWidth = 30,
-  sinksRight = FALSE
-)
-
-
-saveNetwork(sankey_plot, "./sn1.html")
-webshot::install_phantomjs()
-webshot("sn1.html", "sn1.png", vwidth = 1500, vheight = 500)
-
-```
-
-
-```{r attrition through intake, echo=TRUE, message=FALSE, warning=FALSE, results='asis'}
-
-
-
-```
-
+- There are three duplicate `participant_code`s in the `posttreat` survey
 
 
 # Data Quality Checks
@@ -289,12 +158,14 @@ intake_new <- intake_new %>%
 
 # make a new education variable
 intake_new <- intake_new %>%
-  select(participant_code, starts_with('educ_')) %>%
+  # ResponseId is unique ID for intake survey
+  select(ResponseId, starts_with('educ_')) %>% 
   pivot_longer(cols = starts_with('educ_')) %>%
   filter(!is.na(value)) %>%
   select(-name) %>%
   rename(new_educ = value) %>%
-  inner_join(intake_new, by = 'participant_code')
+  right_join(intake_new, by = 'ResponseId')
+
 # convert social media platform usage to numeric
 intake_new <- intake_new %>%
   mutate(across(.cols = starts_with('platforms_'),
@@ -343,7 +214,9 @@ pretreat_new <- pretreat_new %>%
     extremity_pre = case_when(
       str_detect(treatment_arm, 'gc') ~ pre_policy_gc,
       str_detect(treatment_arm, 'imm') ~ pre_policy_imm
-    )
+    ),
+    pre_policy_gc_binary = (pre_policy_gc >= 1.5),
+    pre_policy_imm_binary = (pre_policy_imm >= 1.5)
   )
 
 
@@ -622,8 +495,375 @@ survey_df <- survey_df %>%
 ```
 
 
+# Attrition
+```{r load attrition data, message = FALSE, warning = FALSE, include = FALSE}
+# 
+# total_n <- nrow(intake)
+# consent_drop <- intake %>% filter(Consent == 'No, I do NOT consent') %>% nrow()
+# jive_drop <-
+#   intake %>% filter((platforms_jive == 'A lot') |
+#                       (platforms_jive == 'Some')) %>% nrow()
+# device_drop <- intake %>%
+#   filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
+#   nrow()
+# 
+# download_drop <- intake %>%
+#   filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
+#   nrow()
+# 
+# image_drop <- intake %>%
+#   filter(screen_image != 3.0) %>%
+#   filter(!is.na(screen_image)) %>%
+#   nrow()
+# 
+# age_drop <- intake %>%
+#   filter(age < 18) %>%
+#   filter(!is.na(age)) %>% 
+#   nrow()
+# 
+# us_drop <- intake %>%
+#   filter(state == "I do not reside in the United States") %>%
+#   nrow()
+# 
+# forced_attrit <- consent_drop + jive_drop + device_drop + download_drop + image_drop + age_drop + us_drop
+# 
+# intake_completes <- intake %>%
+#   filter(!is.na(participant_code)) %>%
+#   nrow()
+# 
+# total_attrit_intake <- total_n - intake_completes - forced_attrit
+# 
+# pretreat_n <- pretreat %>% nrow()
+# attrit_intake_pretreat <- intake_completes - pretreat_n
+# 
+# pretreat_completes <- pretreat %>%
+#   filter(!is.na(`Q111_Page Submit`)) %>%
+#   nrow()
+# 
+# posttreat_n <- posttreat %>% nrow()
+# 
+# attrit_pre_post <- pretreat_completes - posttreat_n
+# 
+# posttreat_completes <- posttreat %>%
+#   filter(Progress >= 93) %>%
+#   nrow()
 
-## Participant Selection
+
+total_n <- nrow(intake_new)
+consent_drop <- intake_new %>% filter(Consent == 'No, I do NOT consent') %>% nrow()
+jive_drop <-
+  intake_new %>% filter((platforms_jive == 'A lot') |
+                          (platforms_jive == 'Some')) %>% nrow()
+device_drop <- intake_new %>%
+  filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
+  nrow()
+
+download_drop <- intake_new %>%
+  filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
+  nrow()
+
+image_drop <- intake_new %>%
+  filter(screen_image != 3.0) %>%
+  filter(!is.na(screen_image)) %>%
+  nrow()
+
+age_drop <- intake_new %>%
+  filter(age < 18) %>%
+  filter(!is.na(age)) %>% 
+  nrow()
+
+us_drop <- intake_new %>%
+  filter(state == "I do not reside in the United States") %>%
+  nrow()
+
+forced_attrit <- consent_drop + jive_drop + device_drop + download_drop + image_drop + age_drop + us_drop
+
+intake_completes <- intake_new %>%
+  filter(!is.na(participant_code)) %>%
+  nrow()
+
+total_attrit_intake_new <- total_n - intake_completes - forced_attrit
+
+pretreat_n <- pretreat_new %>% nrow()
+attrit_intake_pretreat <- intake_completes - pretreat_n
+
+pretreat_completes <- pretreat_new %>%
+  filter(!is.na(`Q111_Page Submit`)) %>%
+  nrow()
+
+posttreat_n <- posttreat_new %>% nrow()
+
+attrit_pre_post <- pretreat_completes - posttreat_n
+
+posttreat_completes <- posttreat_new %>%
+  filter(Progress >= 93) %>%
+  nrow()
+
+
+```
+
+## Attrition through full study
+```{r attrition through study, echo=TRUE, message=FALSE, warning=FALSE, results='asis'}
+
+# sankey diagram should have columns x, node, next_x, next_node
+nodes <- tribble(
+  ~node, ~stage,
+  'Started intake', 1,
+  'Finished intake', 2,
+  'Did not finish intake', 2,
+  'Dropped during download', 3,
+  'Started pre-treat' , 3,
+  'Finished pre-treat' , 4,
+  'Did not finish pre-treat' , 4,
+  'Started post-treat' , 5,
+  'Lost during newsfeed', 5,
+  'Finished post-treat', 6
+  ) %>%
+  rownames_to_column(var = 'node_index') %>%
+  mutate(node_index = as.numeric(node_index) - 1) %>%
+  mutate(stage = as.character(stage))
+
+sankey_df <- tribble(
+  ~'start', ~'end', ~'n',
+  # 'Started intake', NA, total_n,
+  'Started intake', 'Finished intake', intake_completes,
+  'Started intake', 'Did not finish intake', total_n - intake_completes,
+  'Finished intake', 'Dropped during download', attrit_intake_pretreat,
+  'Finished intake', 'Started pre-treat', pretreat_n,
+  'Started pre-treat', 'Finished pre-treat', pretreat_completes,
+  'Started pre-treat', 'Did not finish pre-treat', pretreat_n - pretreat_completes,
+  'Finished pre-treat', 'Started post-treat', posttreat_n,
+  'Finished pre-treat', 'Lost during newsfeed', pretreat_completes - posttreat_n,
+  'Started post-treat', 'Finished post-treat', posttreat_completes,
+  # 'Finished post-treat', NA, NA
+) %>%
+  left_join(nodes, by = c('start' = 'node')) %>%
+  rename('start_index' = 'node_index') %>%
+  left_join(nodes, by = c('end' = 'node')) %>%
+  rename('end_index' = 'node_index'
+  )
+
+sankey_plot <- networkD3::sankeyNetwork(
+  Links = sankey_df,
+  Nodes = nodes,
+  Source = "start_index",
+  Target = "end_index",
+  Value = "n",
+  units = "TWh",
+  NodeID = 'node',
+  NodeGroup = 'stage',
+  fontSize = 20,
+  nodeWidth = 30,
+  sinksRight = FALSE
+)
+
+
+saveNetwork(sankey_plot, "./sn1.html")
+webshot::install_phantomjs()
+webshot("sn1.html", "sn1.png", vwidth = 1500, vheight = 500)
+
+```
+
+
+```{r attrition through intake, echo=TRUE, message=FALSE, warning=FALSE, results='asis'}
+n_consented <- intake %>% filter(Consent != 'No, I do NOT consent') %>% nrow()
+n_does_not_use_jivehive <- intake %>% 
+  filter(platforms_jive != 'A lot') %>%
+  filter(platforms_jive != 'Some') %>%
+  nrow()
+n_lives_in_us <- intake %>%
+  filter(state != 'I do not reside in the United States') %>%
+  nrow()
+n_age_gr_18 <- intake %>%
+  filter(age >= 18) %>%
+  nrow()
+n_android_iphone_user <- intake %>%
+  filter(device != 'Something else') %>%
+  nrow()
+n_will_download_app <- intake %>%
+  filter(download_apple != 'No, I am NOT') %>%
+  filter(download_android != 'No, I am NOT') %>%
+  nrow()
+n_passed_3_att_check <- intake %>%
+  filter(!is.na(screen_image)) %>%
+  filter(screen_image == 3) %>%
+  nrow()
+
+
+intake_drops_nodes <- tribble(
+  ~node, ~ stage,
+  "Total", 1,
+  "Consented", 2,
+  "Did not consent", 2,
+  "Does not use JiveHive", 3,
+  "Uses JiveHive", 3,
+  "Lives in US", 4,
+  "Lives outside US", 4,
+  "Age ≥ 18", 5,
+  "Age < 18", 5,
+  "Android/iPhone user", 6,
+  "Non Android/iPhone user", 6,
+  "Download app", 7,
+  "Won't download app", 7,
+  "Passed `3` attention check", 8,
+  "Failed `3` attention check", 8,
+  "Unforced attrition", 9,
+  "Completed intake", 9
+) %>%
+  rownames_to_column(var = 'node_index') %>%
+  mutate(node_index = as.numeric(node_index) - 1) %>%
+  mutate(stage = as.character(stage))
+intake_drops_df <- tribble(
+  ~'start', ~'end', ~'n',
+  'Total', 'Consented', n_consented,
+  'Total', 'Did not consent', total_n - n_consented,
+  'Consented', 'Does not use JiveHive', n_does_not_use_jivehive,
+  'Consented', 'Uses JiveHive', n_consented - n_does_not_use_jivehive,
+  'Does not use JiveHive', 'Lives in US', n_lives_in_us,
+  'Does not use JiveHive', 'Lives outside US', n_does_not_use_jivehive - n_lives_in_us,
+  'Lives in US', 'Age ≥ 18', n_age_gr_18,
+  'Lives in US', 'Age < 18', n_lives_in_us - n_age_gr_18,
+  'Age ≥ 18', 'Android/iPhone user', n_android_iphone_user,
+  'Age ≥ 18', 'Non Android/iPhone user', n_age_gr_18 - n_android_iphone_user,
+  'Android/iPhone user', 'Download app', n_will_download_app,
+  'Android/iPhone user', 'Won\'t download app', n_android_iphone_user - n_will_download_app,
+  'Download app', 'Passed `3` attention check', n_passed_3_att_check,
+  'Download app', 'Failed `3` attention check', n_will_download_app - n_passed_3_att_check,
+  'Passed `3` attention check', 'Unforced attrition', total_n - intake_completes - forced_attrit,
+  'Passed `3` attention check', 'Completed intake', intake_completes
+) %>%
+  left_join(intake_drops_nodes, by = c('start' = 'node')) %>%
+  rename('start_index' = 'node_index') %>%
+  left_join(intake_drops_nodes, by = c('end' = 'node')) %>%
+  rename('end_index' = 'node_index'
+  )
+
+
+sankey_plot2 <- networkD3::sankeyNetwork(
+  Links = intake_drops_df,
+  Nodes = intake_drops_nodes,
+  Source = "start_index",
+  Target = "end_index",
+  Value = "n",
+  units = "TWh",
+  NodeID = 'node',
+  NodeGroup = 'stage',
+  fontSize = 20,
+  nodeWidth = 30,
+  sinksRight = FALSE
+)
+
+
+saveNetwork(sankey_plot2, "./sn2.html")
+webshot::install_phantomjs()
+webshot("sn2.html", "sn2.png", vwidth = 1500, vheight = 500)
+```
+
+```{r}
+intake_new$finished_intake <- !is.na(intake_new$participant_code)
+pretreat_new$finished_pretreat <- !is.na(pretreat_new$`Q111_Page Submit`)
+pretreat_new$finished_newsfeed <- (pretreat_new$participant_code %in% posttreat_new$participant_code)
+posttreat_new$finished_posttreat <- posttreat_new$Progress >= 93
+
+demog_cols <- c('pid3', 'ideo7', 'race_new', 'device', 'new_educ', 'social_media_high', 'platforms_fb', 'platforms_insta', 'platforms_tiktok', 'platforms_x', 'platforms_truth')
+pretreat_cols <- c('pre_ih_binary', 'extremity_pre', 'pre_policy_imm_binary', 'pre_policy_gc_binary', 'political_interest')
+
+pretreat_demogs <- pretreat_new %>%
+  left_join(intake_new %>% select(c(demog_cols, 'participant_code')), by = 'participant_code')
+posttreat_pretreat_demogs <- posttreat_new %>%
+  left_join(pretreat_demogs %>%
+              select(c(demog_cols, pretreat_cols, 'participant_code')),
+            by = 'participant_code')
+
+predict_missing <- function(attrit_df, outcome, covariate) {
+  df <- attrit_df %>%
+    select(!!as.symbol(outcome), !!as.symbol(covariate)) %>%
+    drop_na()
+  if((df[[covariate]] %>% unique() %>% length()) > 2){
+    df <- df %>%
+      mutate_at(.funs = as.factor, .vars = c(covariate))
+    
+    ref <- levels(df[[covariate]])[1]
+  } else {
+    ref <- NA
+  }
+
+  glm_result <-
+    glm(
+      formula = paste0(outcome, '~', covariate),
+      family = 'binomial',
+      data = df
+    )
+  
+  return_df <- glm_result %>% 
+    summary() %>% 
+    .$coefficients %>% 
+    as.data.frame() %>% 
+    mutate(outcome = outcome) %>% 
+    mutate(reference = ref) %>% 
+    rownames_to_column()
+  
+  return(return_df)
+}
+attrit_regs <- predict_missing(intake_new, 'finished_intake', 'pid3') %>%
+bind_rows(predict_missing(intake_new, 'finished_intake', 'ideo7')) %>%
+bind_rows(predict_missing(intake_new, 'finished_intake', 'race_new')) %>%
+bind_rows(predict_missing(intake_new, 'finished_intake', 'device')) %>%
+bind_rows(predict_missing(intake_new, 'finished_intake', 'new_educ')) %>%
+bind_rows(predict_missing(intake_new, 'finished_intake', 'social_media_high')) %>%
+bind_rows(predict_missing(intake_new, 'finished_intake', 'platforms_fb')) %>%
+bind_rows(predict_missing(intake_new, 'finished_intake', 'platforms_insta')) %>%
+bind_rows(predict_missing(intake_new, 'finished_intake', 'platforms_tiktok')) %>%
+bind_rows(predict_missing(intake_new, 'finished_intake', 'platforms_x')) %>%
+bind_rows(predict_missing(intake_new, 'finished_intake', 'platforms_truth')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'pid3')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'ideo7')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'race_new')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'device')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'new_educ')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'social_media_high')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'platforms_fb')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'platforms_insta')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'platforms_tiktok')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'platforms_x')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_pretreat', 'platforms_truth')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'pid3')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'ideo7')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'race_new')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'device')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'new_educ')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'social_media_high')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'platforms_fb')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'platforms_insta')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'platforms_tiktok')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'platforms_x')) %>%
+bind_rows(predict_missing(pretreat_demogs, 'finished_newsfeed', 'platforms_truth')) %>%
+mutate(Estimate = round(Estimate, 2)) %>%
+mutate(stars = case_when(`Pr(>|z|)` <= 0.05 ~ '*',
+                         `Pr(>|z|)` <= 0.01 ~ '**',
+                         `Pr(>|z|)` <= 0.001 ~ '***',
+                         .default = ' ')) %>%
+  filter(rowname != '(Intercept)') %>%
+  # filter(stars != ' ') %>%
+  # filter(!is.na(stars)) %>%
+  mutate(Estimate = paste0(Estimate, stars)) %>%
+  pivot_wider(id_cols = c(rowname, reference), names_from = outcome, values_from = Estimate) %>%
+  filter(str_ends(finished_intake, ' ') + str_ends(finished_pretreat, ' ') + str_ends(finished_newsfeed, ' ') < 3)
+
+# i <- 'platforms_tiktok'
+# intake_new %>%
+#   filter(!is.na(!!as.symbol(i))) %>%
+#   group_by(finished_intake, !!as.symbol(i)) %>%
+#   count()
+
+attrit_regs %>%
+  pander::pander(caption = 'First column displays covariate/level, second column displays the reference level, and the following columns represent the drop point of investigation. *=p<0.05, **=p<0.01, ***=p<0.001.')
+
+```
+
+
+
+# Analytical sample definition
 ### Survey Completion Time
 ```{r survey completion time, message=FALSE, warning=FALSE}
 survey_df$pretreatment_intake_time <- survey_df$`Duration (in seconds)` + survey_df$`Duration (in seconds)_pre`
