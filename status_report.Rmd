@@ -11,8 +11,11 @@ rm(list = ls())
 library(tidyverse)
 library(zipcodeR)
 library(ggvenn)
-# remotes::install_github("davidsjoberg/ggsankey")
-library(ggsankey)
+library(tokenizers)
+library(networkD3)
+library(webshot)
+library(vader)
+
 theme_set(theme_bw() + theme(text = element_text(size = 15)))
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -115,9 +118,9 @@ get_state_names <- function(x) {
 ```
 
 # Notes for Austin
-- All the 3rd order variables have NA values
 - Why do we drop the following codes? `'a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc'`
 - Survey completion time: we were using `Duration (in seconds)_pre + Duration (in seconds)_post` to calculate survey completion time, but we should be using `intake` and `pretreatment` survey completion times
+- Gold star $n$: 835
 
 
 # Attrition
@@ -131,7 +134,7 @@ total_n <- nrow(intake)
 consent_drop <- intake %>% filter(Consent == 'No, I do NOT consent') %>% nrow()
 jive_drop <-
   intake %>% filter((platforms_jive == 'A lot') |
-                      (intake.platforms_jive == 'Some')) %>% nrow()
+                      (platforms_jive == 'Some')) %>% nrow()
 device_drop <- intake %>%
   filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
   nrow()
@@ -157,66 +160,293 @@ us_drop <- intake %>%
 forced_attrit <- consent_drop + jive_drop + device_drop + download_drop + image_drop + age_drop + us_drop
 
 intake_completes <- intake %>%
-  filter(!is.na(participant_code))
+  filter(!is.na(participant_code)) %>%
+  nrow()
 
 total_attrit_intake <- total_n - intake_completes - forced_attrit
 
+pretreat_n <- pretreat %>% nrow()
+attrit_intake_pretreat <- intake_completes - pretreat_n
+
+pretreat_completes <- pretreat %>%
+  filter(!is.na(`Q111_Page Submit`)) %>%
+  nrow()
+
+posttreat_n <- posttreat %>% nrow()
+
+attrit_pre_post <- pretreat_completes - posttreat_n
+
+posttreat_completes <- posttreat %>%
+  filter(Progress >= 93) %>%
+  nrow()
 
 
 ```
 
 ## Attrition through full study
-```{r attrition through study, echo=TRUE, message=FALSE, warning=FALSE}
+```{r attrition through study, echo=TRUE, message=FALSE, warning=FALSE, results='asis'}
 
 # sankey diagram should have columns x, node, next_x, next_node
-nodes <- c(
-  'Started intake',
-  'Finished intake',
-  'Did not finish intake',
-  'Dropped during download',
-  'Started pre-treat' ,
-  'Finished pre-treat' ,
-  'Did not finish pre-treat' ,
-  'Started post-treat' ,
-  'Lost during newsfeed',
-  'Finished post-treat')
+nodes <- tribble(
+  ~node, ~stage,
+  'Started intake', 1,
+  'Finished intake', 2,
+  'Did not finish intake', 2,
+  'Dropped during download', 3,
+  'Started pre-treat' , 3,
+  'Finished pre-treat' , 4,
+  'Did not finish pre-treat' , 4,
+  'Started post-treat' , 5,
+  'Lost during newsfeed', 5,
+  'Finished post-treat', 6
+  ) %>%
+  rownames_to_column(var = 'node_index') %>%
+  mutate(node_index = as.numeric(node_index) - 1) %>%
+  mutate(stage = as.character(stage))
 
 sankey_df <- tribble(
   ~'start', ~'end', ~'n',
-  'Started intake', , total_n,
+  # 'Started intake', NA, total_n,
   'Started intake', 'Finished intake', intake_completes,
   'Started intake', 'Did not finish intake', total_n - intake_completes,
   'Finished intake', 'Dropped during download', attrit_intake_pretreat,
-  'Finished intake', 'Started pre-treat', pretreat_n
+  'Finished intake', 'Started pre-treat', pretreat_n,
+  'Started pre-treat', 'Finished pre-treat', pretreat_completes,
+  'Started pre-treat', 'Did not finish pre-treat', pretreat_n - pretreat_completes,
+  'Finished pre-treat', 'Started post-treat', posttreat_n,
+  'Finished pre-treat', 'Lost during newsfeed', pretreat_completes,
+  'Started post-treat', 'Finished post-treat', posttreat_completes,
+  # 'Finished post-treat', NA, NA
+) %>%
+  left_join(nodes, by = c('start' = 'node')) %>%
+  rename('start_index' = 'node_index') %>%
+  left_join(nodes, by = c('end' = 'node')) %>%
+  rename('end_index' = 'node_index'
+  ) %>%
+  mutate(n = 1)
+
+sankey_plot <- networkD3::sankeyNetwork(
+  Links = sankey_df,
+  Nodes = nodes,
+  Source = "start_index",
+  Target = "end_index",
+  Value = "n",
+  units = "TWh",
+  NodeID = 'node',
+  NodeGroup = 'stage',
+  fontSize = 20,
+  nodeWidth = 30,
+  sinksRight = FALSE
 )
+
+
+saveNetwork(sankey_plot, "./sn1.html")
+webshot::install_phantomjs()
+webshot("sn1.html", "sn1.png", vwidth = 1500, vheight = 500)
+
+```
+
+
+```{r attrition through intake, echo=TRUE, message=FALSE, warning=FALSE, results='asis'}
 
 
 
 ```
 
 
+
 # Data Quality Checks
-```{r load data, message=FALSE, warning=FALSE, include=FALSE}
+```{r load survey data, message=FALSE, warning=FALSE, include=FALSE}
 # read in intake, pre-treatment, and post-treatment survey responses
 intake <- read_csv('./Status Study 12-12-selected/intake.csv') %>%
   # filter(!is.na(participant_code)) %>% # drop participants without a participant code
   mutate(participant_code = participant_code_replacements(PROLIFIC_PID, participant_code)) %>%
   mutate(participant_code = str_to_lower(participant_code))
-  
+
 pretreat <- read_csv('./Status Study 12-12-selected/pre.csv') %>%
   mutate(treatment = str_ends(treatment_arm, 'treat'))
 
 posttreat <- read_csv('./Status Study 12-12-selected/post.csv') %>%
-  mutate(third_order = rowSums(select(., starts_with('third_order')), na.rm = TRUE)) %>%
   # turn PANAS variables into numbers
   mutate_at(vars(starts_with('panas_')), numeric_affect) %>%
   mutate(panas_neg = calculate_affect(., c('hostile', 'ashamed', 'upset', 'afraid'))) %>%
   mutate(panas_pos = calculate_affect(., c('active', 'attentive', 'alert', 'determined', 'inspired'))) %>%
   mutate(panas = panas_pos - panas_neg)
 
-survey_df <- posttreat %>%
-  inner_join(pretreat, by = 'participant_code', suffix = c('_post', '_pre')) %>%
-  inner_join(intake %>% filter(!is.na(participant_code)), # drop participants without a participant code
+
+intake_new <- intake
+pretreat_new <- pretreat
+posttreat_new <- posttreat
+
+# make a new race variable
+intake_new <- intake_new %>%
+  mutate(
+    race_new = case_when(
+      race == 'Hispanic,White' ~ 'Hispanic',
+      race == 'Something else' ~ 'Mixed/other',
+      str_count(race, ',') > 0 ~ 'Mixed/other',
+      .default = race))
+
+# make a new education variable
+intake_new <- intake_new %>%
+  select(participant_code, starts_with('educ_')) %>%
+  pivot_longer(cols = starts_with('educ_')) %>%
+  filter(!is.na(value)) %>%
+  select(-name) %>%
+  rename(new_educ = value) %>%
+  inner_join(intake_new, by = 'participant_code')
+# convert social media platform usage to numeric
+intake_new <- intake_new %>%
+  mutate(across(.cols = starts_with('platforms_'),
+                .fns = 
+                  ~case_match(.,
+                    'A lot' ~ 2,
+                    'Some' ~ 1,
+                    'Not at all' ~ 0,
+                    .default = NA)
+                )
+  ) %>%
+  rowwise() %>%
+  mutate(social_media_sum = sum(across(.cols = starts_with('platforms_')), na.rm = TRUE)) %>%
+  # mutate(social_media_sum = . %>% select(starts_with('platforms_')) %>% rowSums(., na.rm = TRUE))
+  mutate(
+    social_media_high  = (social_media_sum >= 5)
+  )
+
+# convert intellectual humility to numeric
+pretreat_new <- pretreat_new %>%
+  mutate(across(contains('_ih_'),
+                .fns = ~case_match(.,
+                             'Not at all well'~ 0,
+                             'Not too well'~ 1,
+                             'Somewhat well'~ 2,
+                             'Very well'~ 3,
+                             'Extremely well'~ 4)
+  )
+  ) %>%
+  rowwise() %>%
+  mutate(pre_ih = sum(across(.cols = starts_with('pre_ih_')), na.rm = TRUE),
+         pre_ih_binary = pre_ih/6 >= 3)
+
+# calculate moderation of ideals
+pretreat_new <- pretreat_new %>%
+  mutate(across(contains('_policy_'),
+                .fns = ~case_match(.,
+                                  'Strongly agree' ~ 3,
+                                  'Agree' ~ 2,
+                                  'Somewhat agree' ~ 1,
+                                  'Neither agree nor disagree' ~ 0,
+                                  'Disagree' ~ 1,
+                                  'Somewhat disagree' ~ 2,
+                                  'Strongly disagree' ~ 3))) %>%
+  mutate(
+    extremity_pre = case_when(
+      str_detect(treatment_arm, 'gc') ~ pre_policy_gc,
+      str_detect(treatment_arm, 'imm') ~ pre_policy_imm
+    )
+  )
+
+
+posttreat_new <- posttreat_new %>%
+  mutate(across(contains('_ih_'),
+                .fns = 
+                  ~case_match(.,
+                             'Not at all well'~ 0,
+                             'Not too well'~ 1,
+                             'Somewhat well'~ 2,
+                             'Very well'~ 3,
+                             'Extremely well'~ 4)
+  )
+  ) %>%
+  rowwise() %>%
+  mutate(post_ih = sum(across(.cols = starts_with('post_ih_')), na.rm = TRUE))
+
+# convert future usage
+posttreat_new <- posttreat_new %>%
+  mutate(future_use_n = case_match(future_use,
+                                   'Very unlikely' ~ 1,
+                                   'Somewhat unlikely' ~ 2,
+                                   'Neither unlikely nor likely' ~ 3,
+                                   'Somewhat likely' ~ 4,
+                                   'Very likely' ~ 5,
+                                   NA ~ NA))
+
+# convert platform descriptions to numeric values
+
+posttreat_new <- posttreat_new %>%
+  mutate(engaging = case_match(desc_platform_engaging,
+            'Not at all' ~ 5,
+            'Very little' ~ 4,
+            'Some' ~ 3,
+            'Quite a bit' ~ 2,
+            'A great deal' ~ 1,
+            NA ~ NA),
+         toxic = case_match(desc_platform_toxic,
+            'Not at all' ~ 1,
+            'Very little' ~ 2,
+            'Some' ~ 3,
+            'Quite a bit' ~ 4,
+            'A great deal' ~ 5,
+            NA ~ NA),
+         exhausting = case_match(desc_platform_exhausting,
+            'Not at all' ~ 1,
+            'Very little' ~ 2,
+            'Some' ~ 3,
+            'Quite a bit' ~ 4,
+            'A great deal' ~ 5,
+            NA ~ NA)) %>%
+  rowwise() %>%
+  mutate(platforms = mean(c(engaging, toxic, exhausting), na.rm = TRUE))
+
+posttreat_new <- posttreat_new %>%
+  mutate(polite = case_match(desc_users_polite,
+            'Not at all' ~ 5,
+            'Very little' ~ 4,
+            'Some' ~ 3,
+            'Quite a bit' ~ 2,
+            'A great deal' ~ 1,
+            NA ~ NA),
+         aggressive = case_match(desc_users_aggressive,
+            'Not at all' ~ 1,
+            'Very little' ~ 2,
+            'Some' ~ 3,
+            'Quite a bit' ~ 4,
+            'A great deal' ~ 5,
+            NA ~ NA),
+         tolerant = case_match(desc_users_tolerant,
+            'Not at all' ~ 1,
+            'Very little' ~ 2,
+            'Some' ~ 3,
+            'Quite a bit' ~ 4,
+            'A great deal' ~ 5,
+            NA ~ NA)) %>%
+  rowwise() %>%
+  mutate(users = mean(c(polite, aggressive, tolerant), na.rm = TRUE),
+         users_b = mean(c(polite, tolerant), na.rm = TRUE))
+
+posttreat_new <- posttreat_new %>%
+  mutate(comfort = case_match(comfort_sharing,
+                              "Not at all comfortable" ~ 1,
+                               "Slightly comfortable" ~ 2,
+                               "Moderately comfortable" ~ 3,
+                               "Very comfortable" ~ 4,
+                               "Extremely comfortable" ~ 5,
+                               NA ~ NA))
+
+posttreat_new <- posttreat_new %>%
+    mutate(across(contains('_policy_'),
+                .fns = ~case_match(.,
+                                  'Strongly agree' ~ 3,
+                                  'Agree' ~ 2,
+                                  'Somewhat agree' ~ 1,
+                                  'Neither agree nor disagree' ~ 0,
+                                  'Disagree' ~ 1,
+                                  'Somewhat disagree' ~ 2,
+                                  'Strongly disagree' ~ 3)))
+
+survey_df_new <- posttreat_new %>%
+  inner_join(pretreat_new, by = 'participant_code', suffix = c('_post', '_pre')) %>%
+  inner_join(intake_new %>% filter(!is.na(participant_code)), # drop participants without a participant code
              by = 'participant_code') %>%
   # drop participants in the code drop list
   filter(!(participant_code %in% participant_code_drops)) %>%
@@ -226,103 +456,172 @@ survey_df <- posttreat %>%
     str_ends(treatment_arm, 'treat') ~ 'treat',
     str_detect(treatment_arm, 'control') ~ 'control',
     .default = NA
-  ))
-
-# make a new race variable
-survey_df <- survey_df %>% 
+  )) %>%
+  mutate(delta_ih = post_ih - pre_ih) %>%
+  mutate(ingroup_therm_pre = (pid3 == Party1) * pre_therm_1 + (pid3 != Party1) * pre_therm_2,
+         outgroup_therm_pre = (pid3 == Party1) * pre_therm_2 + (pid3 != Party1) * pre_therm_1) %>%
+  mutate(ingroup_therm_pre = ifelse(pid3 %in% c('Democrat', 'Republican'), ingroup_therm_pre, NA),
+         outgroup_therm_pre = ifelse(pid3 %in% c('Democrat', 'Republican'), outgroup_therm_pre, NA)) %>%
+  mutate(ingroup_therm_post = (pid3 == Party1) * post_therm_1 + (pid3 != Party1) * post_therm_2,
+         outgroup_therm_post = (pid3 == Party1) * post_therm_2 + (pid3 != Party1) * post_therm_1) %>%
+  mutate(ingroup_therm_post = ifelse(pid3 %in% c('Democrat', 'Republican'), ingroup_therm_post, NA),
+         outgroup_therm_post = ifelse(pid3 %in% c('Democrat', 'Republican'), outgroup_therm_post, NA)) %>%
+  mutate(outgroup_therm_change = outgroup_therm_post - outgroup_therm_pre,
+         ingroup_therm_change = ingroup_therm_post - ingroup_therm_pre,
+         affective_polarization = (ingroup_therm_change - outgroup_therm_change)/100) %>%
   mutate(
-    race_new = case_when(
-    race == 'Hispanic,White' ~ 'Hispanic',
-    race == 'Something else' ~ 'Mixed/other',
-    str_count(race, ',') > 0 ~ 'Mixed/other',
-    .default = race))
-
-# make a new education variable
-survey_df <- survey_df %>% 
-  select(participant_code, starts_with('educ_')) %>%
-  pivot_longer(cols = starts_with('educ_')) %>%
-  filter(!is.na(value)) %>%
-  select(-name) %>%
-  rename(new_educ = value) %>%
-  inner_join(survey_df, by = 'participant_code') 
-
-# convert intellectual humility to numeric
-survey_df <- survey_df %>%
-  mutate(across(contains('_ih_'), 
-                .fns = function(x) {
-                  case_match(x,
-                            'Not at all well'~ 0,
-                            'Not too well'~ 1,
-                            'Somewhat well'~ 2,
-                            'Very well'~ 3,
-                            'Extremely well'~ 4)}
-                )
-         ) %>%
-  rowwise() %>%
-  mutate(pre_ih = sum(across(.cols = starts_with('pre_ih_')), na.rm = TRUE),
-         post_ih = sum(across(.cols = starts_with('post_ih_')), na.rm = TRUE),
-         delta_ih = post_ih - pre_ih,
-         pre_ih_binary = pre_ih/6 >= 3)
-
-# calculate affective polarization
-survey_df <- survey_df %>%
-  mutate(
-    same_therm_change = post_therm_1 - pre_therm_1, # change in own party ideals
-    diff_therm_change = post_therm_2 - pre_therm_2, # change in out-party feelings,
-    affective_polarization = (same_therm_change - diff_therm_change)/100
-  )
-
-# calculate moderation of ideals
-survey_df <- survey_df %>%
-  mutate(across(contains('_policy_'),
-                .fns = function(x) case_match(x,
-                                              'Strongly agree' ~ 3, 
-                                              'Agree' ~ 2,
-                                              'Somewhat agree' ~ 1, 
-                                              'Neither agree nor disagree' ~ 0, 
-                                              'Disagree' ~ 1,
-                                              'Somewhat disagree' ~ 2,
-                                              'Strongly disagree' ~ 3))) %>%
-  mutate(
-    extremity_pre = case_when(
-      str_detect(treatment_arm, 'gc') ~ pre_policy_gc,
-      str_detect(treatment_arm, 'imm') ~ pre_policy_imm
-    ),
     extremity_post = case_when(
       str_detect(treatment_arm, 'gc') ~ post_policy_1,
       str_detect(treatment_arm, 'imm') ~ post_policy_2
     ),
     extremity_post_less_pre = extremity_post - extremity_pre
-  )
+  ) %>%
+  mutate(mc_correct_treat = (condition == 'treat') * (manip_check == 'The degree to which users respectfully engage with and learn from differing opinions.'),
+         mc_correct_control = (condition == 'control') * (manip_check == 'The degree to which the user is "popular", or the degree to which they are able to achieve "likes".'),
+         mc_correct_pure_control = (condition == 'pure_control') * (manip_check == 'There were no user badges on the platform.')) %>%
+  mutate(mc_correct = mc_correct_treat + mc_correct_control + mc_correct_pure_control)
 
-# convert platform descriptions to numeric values
-survey_df <- survey_df %>%
-  mutate(across(contains('desc_platform_'),
-         .fns = function(x) {case_match(x,
-                                       "Not at all"~ 1,
-                                       "Very little"~ 2,
-                                       "Some"~ 3,
-                                       "Quite a bit"~ 4,
-                                       "A great deal"~ 5,
-                                       .default = NA)}))
-
-# convert social media platform usage to numeric
-survey_df <- survey_df %>%
-  mutate(across(starts_with('platforms_'),
-                .fns = function(x) {
-                  case_when(
-                            x == 'A lot' ~ 2, 
-                            x == 'Some' ~ 1, 
-                            x == 'Not at all' ~ 0,
-                             .default = NA)
-                })
-         ) %>%
-  mutate(social_media_sum = sum(across(.cols = starts_with('platforms_'))), na.rm = TRUE) %>%
-  mutate(
-         social_media_high  = (social_media_sum >= 5)
-         )
+survey_df <- survey_df_new
 
 ```
+
+```{r load engagement data, message = FALSE, warning = FALSE, include = FALSE}
+ih_posts <- c(
+  "A lot of reporting I've seen suggests that the illegal crossing are very dangerous. If that's true, we should do everything we can to deter this. I've heard that many die every year crossing in unsafe areas, and that even when they make it across they die of heat and thrust or crammed in the back of trucks. It seems like, then, a border wall is for their safety as well as ours.",
+            "I get the reason some people want gun control.  I want them to understand that where I live, we need guns. We are over run with coyotes. They kill our pets. We try and kill them. You have to use a weapon with range. What youd call an assault weapon is perfect for that, and they are popular here for coyotes. I just scare them with my gun, because I don't ever hit them",
+            "I might be wrong but it seems like the places that have the most mayhem are those with the most restrictive laws. I think about the pressure cooker bombs a few years back at the marathon.",
+            "I totally understand, it's not the guns fault. We shouldn't do away with guns because of recent incidents, but it seems to me that we need to look at those who use the guns. I think regulating who can get access to them could help solve this issue. I agree that people have the need to feel safe and they should secure their environment the way they feel comfortable",
+            "I try not to be naive that utopia exists or can exist. I know some people think differently, but I do believe in laws and rules and that people are basically good and follow them most of the time. I'd love to see data on this, but I feel like it's only the fringe that does not follow them and causes mayhem for the rest of us.",
+            "I understand it is a complex issue and I actually have no problem with asylum seekers. I personally believe that we should be letting in people who will come in to this country the legal way and assimilate into our country. This is just my perspective and open to hear the views of others.",
+            "I understand why people are worried about the Southern Border situation, but I don't think that has much to do with terrorism. I might be wrong, but I think that more terrorists are coming over the Canadian border.",
+            "I understand why some people want  gun control.  It would help insure guns aren't  given to unstable people. But I also believe that as an American I have every right to defend my property, family, and myself with a gun or guns. I worry only criminals would have weapons.",
+            "I'm honestly curious about what the other side thinks. I agree that the gangs and the drugs that come over here from Mexico are a problem. At the same time,  I think we already have gangs and drugs over here before Mexico brought them over.",
+            "I'm no psychologist, but I don't think that criminals care what the laws are and what they can or can't do. If that is true, they will obtain a gun by whatever means they can, carry it illegally, use it in a crime and possibly use it to rob you.",
+            "I'm not an expert on gun policy, but I did write research papers on the topic in college. While doing research, I was persuaded there was a lot misinformation put out by the NRA, which wa led by someone personally enriching himself from the sales of ammunition.",
+            "I'm open to hearing other views, but it sure seems like gun control doesn't work. I've heard that the states with the strictest gun control has the highest crime rates and murder rates. I would think that's because only criminal have the guns.",
+            "I'm sure others disagree, but I don't think it's our responsibility as a nation to take care of people from other countries who can't get any help from their own government. I think we have enough AMERICANS who need assistance, and we should help them first. I guess I just don't understand why we should be paying for anyone who manages to sneak in to our country.",
+            "It's been a long time since I took US history, but I believe this land as far as Texas, New Mexico, Arizona, California, we're all Mexico territory before The United States took it from them. So I guess it would make sense that They're going to come back, maybe because they never left.",
+            "Living close to the border has made me think that we need a wall. Our border patrol, who are the real experts, has asked for a wall. I haven't dug into the numbers, but I've heard the wall has already made in a difference in the areas it is in place. I feel we shouldn't ask our border patrol to risk their lives and not give them the tools they ask for.",
+            "Others might disagree, but I don't understand the argument that  Mexicans are taking jobs.  If you are unemployed, couldn't find a job anywhere, and a lettuce field in your city that was hiring, would you apply? My sense is that most Americans would say no.",
+            "Others might disagree, but I think we need reasonable and uniform NATIONAL gun legislation. I think one reason for the failure of gun control laws in the US is the pathwork of state-to-state differences. I might be wrong, but I think Congress even forbid the government trackingof gun violence deaths.",
+            "I'm not an expert, but it seems like more immigration can only hurt me. I'm interesting in hearing the argument for the other side.",
+            "I understand the argument that the system needs reform. However, my own view is that many who have immigrated are the epitome of an outstanding citizens that contributes to society and our economy.",
+            "I'm open to other ideas, but I wonder if we should require every gun sale to be registered and require gun manufacturers to include trigger locks at no additional charge to the consumer.  It probably won't solve all our problems, but I think that we can take measures to reduce gun deaths without trampling on the 2nd Amendment."
+)
+posts <- read_csv('./Status Study 12-12-selected/participant-export.csv') %>% 
+  bind_rows(read_csv('./Status Study 12-12-selected/export-deleted.csv')) %>%
+  filter(participantCode %in% survey_df$participant_code) %>%
+  mutate(condition = case_when(
+    str_ends(treatmentArm, 'pc') ~ 'pure_control',
+    str_ends(treatmentArm, 'treat') ~ 'treat',
+    str_detect(treatmentArm, 'control') ~ 'control',
+    .default = NA
+  )) %>%
+  mutate(ih = postOrCommentText %in% ih_posts)
+
+likes <- posts %>%
+  filter(participantLiked == 1)
+
+dislikes <- posts %>%
+  filter(participantDisliked == 1)
+
+
+count_tokens <- function(x) {
+  x %>%
+    tokenize_words() %>%
+    sapply(., FUN = length) %>%
+    return()
+}
+content <- posts %>%
+  filter(userContent == 1) %>%
+  mutate(length = count_tokens(postOrCommentText)) %>%
+  mutate(this_is_a_comment = (parentPost != 'N/A'),
+         this_is_a_post = (parentPost == 'N/A'))
+
+
+post_vader_df <- vader::vader_df(content$postOrCommentText) %>%
+  select(compound, pos, neg) %>%
+  rename(sent_pos = pos,
+         sent_neg = neg,
+         sent = compound)
+content_vader <- content %>%
+  bind_cols(post_vader_df) %>%
+  select(participantCode, sent_pos, sent_neg, sent)
+
+
+
+
+survey_df <- survey_df %>%
+  left_join(likes %>%
+              group_by(participantCode) %>%
+              mutate(total_likes = n()) %>%
+              ungroup() %>%
+              group_by(participantCode, ih) %>%
+              summarize(ih_likes = n(),
+                        total_likes = mean(total_likes),
+                        p_likes_ih = ih_likes/total_likes) %>%
+              ungroup() %>%
+              filter(ih == 1) %>%
+              select(-ih), by = c('participant_code' = 'participantCode')) %>%
+  left_join(dislikes %>%
+              group_by(participantCode) %>%
+              mutate(total_dislikes = n()) %>%
+              ungroup() %>%
+              group_by(participantCode, ih) %>%
+              summarize(ih_dislikes = n(),
+                        total_dislikes = mean(total_dislikes),
+                        p_dislikes_ih = ih_dislikes/total_dislikes) %>%
+              ungroup() %>%
+              filter(ih == 1) %>%
+              select(-ih), by = c('participant_code' = 'participantCode')) %>%
+  left_join(content_vader %>%
+  group_by(participantCode) %>%
+  summarize(sent_pos = mean(sent_pos, na.rm = TRUE),
+            sent_neg = mean(sent_neg, na.rm = TRUE),
+            sent = mean(sent, na.rm = TRUE)), by = c('participant_code' = 'participantCode')) %>%
+  mutate(ih_likes = replace_na(ih_likes, 0),
+         p_likes_ih = replace_na(p_likes_ih, 0),
+         total_likes = replace_na(total_likes, 0),
+         ih_dislikes = replace_na(ih_dislikes, 0),
+         p_dislikes_ih = replace_na(p_dislikes_ih, 0),
+         total_dislikes = replace_na(total_dislikes, 0))
+
+all_dwell <- posts %>%
+  group_by(participantCode) %>%
+  summarize(total_dwell_time = sum(dwellTimeInSeconds))
+
+ih_dwell <- posts %>%
+  group_by(participantCode, ih) %>%
+  summarize(ih_dwell_time = sum(dwellTimeInSeconds)) %>%
+  group_by(participantCode) %>%
+  mutate(total_dwell_time = sum(ih_dwell_time),
+         prop_dwell_time_ih = ih_dwell_time/total_dwell_time) %>%
+  filter(ih == 1) %>%
+  select(-ih)
+
+survey_df <- survey_df %>%
+  left_join(ih_dwell, by = c('participant_code' = 'participantCode'))
+
+```
+
+```{r load third order data, message = FALSE, warning = FALSE, include = FALSE}
+third_order <-
+  read_csv('./Status Study 12-12-selected/third-order.csv') %>%
+  mutate(
+    nas = is.na(third_order_A1) + is.na(third_order_A2) + is.na(third_order_B1) + is.na(third_order_B1)
+  ) %>%
+  filter(nas < 4)
+
+survey_df <- survey_df %>%
+  select(-starts_with('third_order')) %>%
+  left_join(third_order, by = 'participant_code') %>%
+  # replace_na(select(starts_with('third_order_')), 0)
+  mutate(across(starts_with('third_order_'), ~replace_na(.x, 0))) %>%
+  rowwise() %>%
+  mutate(third_order = sum(across(starts_with('third_order'))))
+```
+
+
 
 ## Participant Selection
 ### Survey Completion Time
@@ -343,13 +642,13 @@ survey_df %>%
     title = 'Survey Completion Time',
     subtitle = paste0('#Speeders (Time <= Median/4): ', sum(survey_df$speeder))
   )
-  
+
 sum(survey_df$pretreatment_intake_time <= median(survey_df$pretreatment_intake_time)/2)
 ```
 
 ## Zip code/state matches
 ```{r zip code/state matches, message = FALSE, warning = FALSE}
-# survey_df$state_from_zip <- 
+# survey_df$state_from_zip <-
 survey_df <- survey_df %>%
   mutate(zip = case_when(
     nchar(zip) == 4 ~ paste0('0', zip),
@@ -362,7 +661,7 @@ survey_df <- zip_code_db %>%
   rename(zip_state = state) %>%
   right_join(survey_df, by = c('zipcode' = 'zip')) %>%
   mutate(
-    zip_state = 
+    zip_state =
       case_when(
         zipcode == '77407' ~ "TX",
         zipcode == '85756' ~ "AZ",
@@ -408,27 +707,45 @@ survey_df$correct_bonus <- survey_df$password %>%
   replace_na(FALSE)
 ```
 
+### Made 1+ post and 1+ comment
+```{r at least one post and comment, echo=FALSE, message=FALSE, warning=FALSE}
+survey_df <- survey_df %>%
+  right_join(content %>%
+  group_by(participantCode) %>%
+  summarize(n_posts = sum(this_is_a_post),
+            n_comments = sum(this_is_a_comment)), by = c('participant_code' = 'participantCode')) %>%
+  mutate(participant_commented = (n_comments >= 1) & !is.na(n_comments),
+         participant_posted = (n_posts >= 1) & !is.na(n_posts))
+```
+
+
 ```{r venn diagram, message = FALSE, warning = FALSE, echo = FALSE}
+
 ggplot(survey_df) +
-  geom_venn(aes(A = !speeder, B = pass_zip_check, C = correct_bonus), show_percentage = FALSE,
-            set_names = c('Did not speed', 'Zip code state = Reported state', 'Correct bonus word'),
-            fill_color = c('#3b528b', '#21918c', '#5ec962')) +
+  geom_venn(aes(A = !speeder, B = pass_zip_check, C = correct_bonus, D = (mc_correct == 1), E = participant_commented, G = participant_posted), show_percentage = FALSE,
+            set_names = c('Did not speed', 'Zip code state = Reported state', 'Correct bonus word', 'Correct manip check', 'Commented', 'Posted'),
+            fill_color = c('#3b528b', '#21918c', '#5ec962', '#1ff340', '#6b528b', '#9b528b')) +
   scale_fill_viridis_b() +
   theme_classic() +
-  theme(axis.text.x=element_blank(), 
-      axis.ticks.x=element_blank(), 
-      axis.text.y=element_blank(), 
+  theme(axis.text.x=element_blank(),
+      axis.ticks.x=element_blank(),
+      axis.text.y=element_blank(),
       axis.ticks.y=element_blank(),
       axis.line.x = element_blank(),
-      axis.line.y = element_blank()) 
+      axis.line.y = element_blank())
 ```
+
 ```{r participant check, message = FALSE, warning = FALSE, echo = FALSE}
 survey_df %>%
-  group_by(!speeder, pass_zip_check, correct_bonus) %>%
+  group_by(!speeder, pass_zip_check, correct_bonus, (mc_correct == 1), participant_commented, participant_posted) %>%
   count() %>%
   rename(`Did not speed` = `!speeder`,
          `Zip code state = Reported state` = pass_zip_check,
-         `Correct bonus word` = correct_bonus) %>%
+         `Correct bonus word` = correct_bonus,
+         `Pass manip check` = `(mc_correct == 1)`,
+         `Commented` = participant_commented,
+         `Posted` = participant_posted) %>%
+  arrange(-n) %>%
   pander::pander()
 ```
 
@@ -444,7 +761,7 @@ demogs_plot <- function(col, factor_list = NULL, title = NA) {
   }
   if(col == 'age') {
   p <- ggplot(survey_df) +
-      geom_histogram(aes_string(x = col, fill = 'condition'), position = 'identity', alpha = 0.5, stat = 'count') 
+      geom_histogram(aes_string(x = col, fill = 'condition'), position = 'identity', alpha = 0.5, stat = 'count')
   p_value <- min(ks.test(survey_df[survey_df$condition == 'treat', ]$age,
                          survey_df[survey_df$condition == 'control', ]$age)$p.value,
                  ks.test(survey_df[survey_df$condition == 'treat', ]$age,
@@ -456,9 +773,9 @@ demogs_plot <- function(col, factor_list = NULL, title = NA) {
   else {
     p <- ggplot(survey_df) +
       geom_histogram(aes_string(x = col, fill = 'condition'), position = 'dodge2', stat = 'count')
-    p_value <- survey_df %>% 
-      group_by(condition, (!!as.symbol(col))) %>% 
-      count() %>% 
+    p_value <- survey_df %>%
+      group_by(condition, (!!as.symbol(col))) %>%
+      count() %>%
       pivot_wider(id_cols = 'condition', names_from = col, values_from = 'n') %>%
       ungroup() %>%
       column_to_rownames('condition') %>%
@@ -478,11 +795,11 @@ demogs_plot <- function(col, factor_list = NULL, title = NA) {
 
 demogs_plot('age', title = 'Age')
 demogs_plot('pid3', c('Democrat', 'Independent', 'Republican', 'Other'), title = 'Political Identity')
-demogs_plot('ideo7', 
+demogs_plot('ideo7',
             c('Extremely liberal', 'Liberal', 'Somewhat liberal', 'Moderate or middle of the road', 'Somewhat conservative', 'Conservative', 'Extremely conservative'),
             'Ideology')
 
-demogs_plot('new_educ', c('Less than high school', 
+demogs_plot('new_educ', c('Less than high school',
                           'High school graduate or equivalent (GED)',
                           'Some college but no degree',
                           'Associate degree in college',
@@ -490,32 +807,34 @@ demogs_plot('new_educ', c('Less than high school',
                           'Post-graduate degree'),
             'Education')
 ```
-# Attrition Checks
-```{r attrition, echo=FALSE, include=FALSE, warnings=FALSE, error=FALSE}
-intake_w_nas <- read_csv('./Status Study 12-12-selected/intake.csv') %>%
-  mutate(participant_code = participant_code_replacements(PROLIFIC_PID, participant_code)) %>%
-  mutate(participant_code = str_to_lower(participant_code))
-pretreat_w_nas <- read_csv('./Status Study 12-12-selected/pre.csv')
-posttreat_w_nas <- read_csv('./Status Study 12-12-selected/post.csv')
+
+
+<!-- # Attrition Checks -->
+<!-- ```{r attrition, echo=FALSE, include=FALSE, warnings=FALSE, error=FALSE} -->
+<!-- intake_w_nas <- read_csv('./Status Study 12-12-selected/intake.csv') %>% -->
+<!--   mutate(participant_code = participant_code_replacements(PROLIFIC_PID, participant_code)) %>% -->
+<!--   mutate(participant_code = str_to_lower(participant_code)) -->
+<!-- pretreat_w_nas <- read_csv('./Status Study 12-12-selected/pre.csv') -->
+<!-- posttreat_w_nas <- read_csv('./Status Study 12-12-selected/post.csv') -->
 
 
 
-intake_w_nas %>%
-  mutate(consent_drop = (Consent == 'No, I do NOT consent'),
-         jive_drop = (platforms_jive == 'A lot') | (platforms_jive == 'Some'),
-         device_drop = device == 'Something else',
-         download_drop = (download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT'),
-         image_drop = (screen_image != 3),
-         age_drop = (age < 18),
-         us_drop = (state == 'I do not reside in the United States'),
-         intake_complete = !is.na(participant_code)) %>%
-  group_by(across(ends_with('_drop'))) %>%
-  count() %>%
-  ungroup() %>%
-  pivot_longer(cols = -n) %>%
-  filter(!is.na(value))
+<!-- intake_w_nas %>% -->
+<!--   mutate(consent_drop = (Consent == 'No, I do NOT consent'), -->
+<!--          jive_drop = (platforms_jive == 'A lot') | (platforms_jive == 'Some'), -->
+<!--          device_drop = device == 'Something else', -->
+<!--          download_drop = (download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT'), -->
+<!--          image_drop = (screen_image != 3), -->
+<!--          age_drop = (age < 18), -->
+<!--          us_drop = (state == 'I do not reside in the United States'), -->
+<!--          intake_complete = !is.na(participant_code)) %>% -->
+<!--   group_by(across(ends_with('_drop'))) %>% -->
+<!--   count() %>% -->
+<!--   ungroup() %>% -->
+<!--   pivot_longer(cols = -n) %>% -->
+<!--   filter(!is.na(value)) -->
 
-```
+<!-- ``` -->
 
 
 
@@ -530,17 +849,17 @@ main_hypothesis_test <- function(df,
                                  return_object = FALSE) {
   # isolate data for main group and contrast group
   outcome_main_group <- df %>%
-    filter(condition == main_condition) %>% 
-    .[outcome] %>% 
-    drop_na() %>% 
+    filter(condition == main_condition) %>%
+    .[outcome] %>%
+    drop_na() %>%
     pull(.)
-  
-  outcome_contrast_group <- df %>% 
-    filter(condition == contrast_condition) %>% 
-    .[outcome] %>% 
-    drop_na() %>% 
+
+  outcome_contrast_group <- df %>%
+    filter(condition == contrast_condition) %>%
+    .[outcome] %>%
+    drop_na() %>%
     pull(.)
-  
+
   # run t test comparing these two groups
   ttest_results <- t.test(
     x = outcome_main_group,
@@ -552,7 +871,7 @@ main_hypothesis_test <- function(df,
   ttest_pvalue <- ttest_results$p.value
   ttest_cohens_d <- effsize::cohen.d(outcome_main_group,
                                      outcome_contrast_group)$estimate
-  
+
   # make ttest plot
   n_stars <- ''
   if(ttest_pvalue < 0.05) { n_stars <- '*'}
@@ -572,9 +891,9 @@ main_hypothesis_test <- function(df,
          fill = 'Contrast groups',
          linetype = 'Contrast groups'
          )
-  
+
   if(ttest_pvalue < 0.05) {
-    p <- p + 
+    p <- p +
       theme(plot.title = element_text(face = 'bold'),
             plot.subtitle = element_text(face = 'bold'))
   }
@@ -609,14 +928,6 @@ subgroup_hypothesis_test <- function(df,
   if (return_object) return(result)
 }
 
-subgroup_cols <- c('pre_ih_binary',
-                   'pre_ih_binary',
-                   'social_media_high',
-                   'social_media_high',
-                   'pid3',
-                   'pid3')
-subgroup_rhss <- list(1, 0, 1, 0, 'Democrat', 'Republican')
-
 multiple_subgroups_htest <- function(df,
                                  outcome,
                                  subgroup_cols,
@@ -625,7 +936,7 @@ multiple_subgroups_htest <- function(df,
                                  contrast_condition = 'control',
                                  display_plot = FALSE,
                                  title = '',
-                                 return_object = FALSE) 
+                                 return_object = FALSE)
   {
   row_names <- paste0(subgroup_cols, '=', subgroup_rhss)
   subgroup_results <- data.frame('contrast' = rep(NA, length(row_names)),
@@ -676,6 +987,7 @@ main_hypothesis_test(survey_df, 'delta_ih', display_plot = TRUE, title = 'All pa
 
 ## Hypothesis 4: engage more with intellectually humble content
 
+
 ## Hypothesis 5: experience a greater reduction in their affective polarization
 ```{r h5, echo=FALSE, warning=FALSE}
 main_hypothesis_test(survey_df, 'affective_polarization', display_plot = TRUE, title = 'All participants', return_object = FALSE)
@@ -688,21 +1000,22 @@ main_hypothesis_test(survey_df, 'extremity_post_less_pre', display_plot = TRUE, 
 
 
 ## Subgroup Analyses
-```{r echo=TRUE, warning=FALSE}
+```{r subgroup, echo=TRUE, warning=FALSE}
+
+subgroup_cols <- c('pre_ih_binary',
+                   'pre_ih_binary',
+                   'social_media_high',
+                   'social_media_high',
+                   'pid3',
+                   'pid3')
+subgroup_rhss <- list(TRUE, FALSE, 1, 0, 'Democrat', 'Republican')
 
 subgroup <- lapply(X = list('panas_neg', 'panas_pos', 'panas', 'delta_ih', 'affective_polarization', 'extremity_post_less_pre'),
        function(x) multiple_subgroups_htest(
   df = survey_df,
   outcome = x,
-  subgroup_cols = c(
-    'pre_ih_binary',
-    'pre_ih_binary',
-    'social_media_high',
-    'social_media_high',
-    'pid3',
-    'pid3'
-  ),
-  subgroup_rhss = list(1, 0, 1, 0, 'Democrat', 'Republican'),
+  subgroup_cols = subgroup_cols,
+  subgroup_rhss = subgroup_rhss,
   main_condition = 'treat',
   contrast_condition = 'control',
   display_plot = FALSE,
@@ -727,14 +1040,107 @@ subgroup %>%
 
 
 
+## Other Questions
+### How do descriptions of the platform differ between treated and control users?
+```{r description of platform, echo=TRUE, warning=FALSE}
+main_hypothesis_test(survey_df, 'engaging', display_plot = TRUE, title = 'All participants, platform description')
+main_hypothesis_test(survey_df, 'toxic', display_plot = TRUE, title = 'All participants, platform description')
+main_hypothesis_test(survey_df, 'exhausting', display_plot = TRUE, title = 'All participants, platform description')
+```
+
+### How do descriptions of other users differ between treated and control users?
+```{r description of users, echo=TRUE, warning=FALSE}
+main_hypothesis_test(survey_df, 'polite', display_plot = TRUE, title = 'All participants, user description')
+main_hypothesis_test(survey_df, 'aggressive', display_plot = TRUE, title = 'All participants, user description')
+main_hypothesis_test(survey_df, 'tolerant', display_plot = TRUE, title = 'All participants, user description')
+```
+
+### How does treatment affect comfort in sharing ideas?
+```{r comfort sharing, echo = TRUE, warning = FALSE}
+main_hypothesis_test(survey_df, 'comfort', display_plot = TRUE, title = 'All participants, user description')
+```
+
+### Estimation of bots
+```{r bot estimation, echo = TRUE, warning = FALSE}
+survey_df %>% 
+  group_by(bots) %>% 
+  count() %>%
+  ungroup() %>%
+  mutate(prop = round(n/sum(n), 3))
+```
+
+
+### How does treatment affect engagement with the platform?
+```{r ih likes vs total ilkes, echo = TRUE, warning = FALSE}
+
+ggplot(survey_df) +
+  geom_histogram(aes(x = p_likes_ih, y = ..density.., fill = condition), position = 'identity', alpha = 0.4) +
+  geom_density(aes(x = p_likes_ih, fill = condition), position = 'identity', alpha = 0.4) +
+  labs(x = 'Proportion of liked posts that were IH',
+       title = 'Proportion of liked posts that were IH by condition')
+```
+
+
+```{r ih likes vs total ilkes, echo = TRUE, warning = FALSE}
+
+ggplot(survey_df) +
+  geom_histogram(aes(x = p_likes_ih, y = ..density.., fill = condition), position = 'identity', alpha = 0.4) +
+  geom_density(aes(x = p_likes_ih, fill = condition), position = 'identity', alpha = 0.4) +
+  labs(x = 'Proportion of liked posts that were IH',
+       title = 'Proportion of liked posts that were IH by condition')
+
+ggplot(survey_df) +
+  geom_histogram(aes(x = p_dislikes_ih, y = ..density.., fill = condition), position = 'identity', alpha = 0.4) +
+  geom_density(aes(x = p_dislikes_ih, fill = condition), position = 'identity', alpha = 0.4) +
+  labs(x = 'Proportion of disliked posts that were IH',
+       title = 'Proportion of disliked posts that were IH by condition')
+
+
+```
+
+### How does dwell time relate to outcome measures?
+```{r}
+
+ggplot(survey_df) +
+  geom_histogram(aes(x = prop_dwell_time_ih, y = ..density.., fill = condition), alpha = 0.5, position =  'identity') +
+  geom_density(aes(x = prop_dwell_time_ih, fill = condition), alpha = 0.5, position = 'identity') +
+  labs(x = 'Proportion of time spent on IH posts')
+
+
+ggplot(survey_df) +
+  geom_point(aes(x = ih_dwell_time, y = panas, color = condition), alpha = 0.5) +
+  geom_smooth(aes(x = ih_dwell_time, y = panas, color = condition), alpha = 0.5) +
+  geom_smooth(aes(x = ih_dwell_time, y = panas), alpha = 1, color = 'black') +
+  labs(x = 'Dwell time on IH posts (Seconds)',
+       y = 'Emotional Experience (PANAS)')
 
 
 
-
-
-
-
-
+survey_df %>%
+  select(
+    ih_dwell_time,
+    panas,
+    # third_order,
+    delta_ih,
+    # future_use_n,
+    engaging,
+    toxic,
+    exhausting,
+    platforms,
+    polite,
+    aggressive,
+    tolerant,
+    users,
+    users_b,
+    comfort
+  ) %>%
+  pivot_longer(cols = -ih_dwell_time) %>%
+  group_by(name) %>%
+  summarize(pearson_p = cor.test(ih_dwell_time, value, method = 'pearson')$p.value %>% round(., 3),
+            pearson = cor.test(ih_dwell_time, value, method = 'pearson')$estimate  %>% round(., 3),
+            spearman_p = cor.test(ih_dwell_time, value, method = 'spearman')$p.value %>% round(., 3),
+            spearman = cor.test(ih_dwell_time, value, method = 'spearman')$estimate  %>% round(., 3)) %>% pander::pander()
+```
 
 
 
