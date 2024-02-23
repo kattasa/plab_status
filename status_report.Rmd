@@ -861,6 +861,67 @@ attrit_regs %>%
 
 ```
 
+```{r are treated conservatives more likely to drop during the newsfeed}
+pretreat_demogs %>%
+  mutate(condition = case_when(
+    str_ends(treatment_arm, 'pc') ~ 'pure_control',
+    str_ends(treatment_arm, 'treat') ~ 'treat',
+    str_detect(treatment_arm, 'control') ~ 'control',
+    .default = NA)
+  ) %>%
+  mutate(ideo7 = as.factor(ideo7)) %>%
+  filter(!is.na(ideo7)) %>%
+  glm(formula = "finished_newsfeed ~ ideo7 * condition", family = 'binomial') %>%
+  summary() %>%
+  pander::pander(caption = 'No significant difference between newsfeed dropout based on political party')
+```
+
+```{r}
+
+crash_times <- tribble(
+  ~start, ~end,
+  '12/12/2023 11:25', '12/12/2023 11:27',
+  '12/12/2023 11:31', '12/12/2023 11:33',
+  '12/12/2023 11:36', '12/12/2023 11:38',
+  '12/12/2023 11:42', '12/12/2023 11:44',
+  '12/13/2023 14:50', '12/13/2023 14:50',
+  '12/13/2023 14:56', '12/13/2023 14:58',
+  '12/13/2023 15:14', '12/13/2023 15:16',
+  '12/13/2023 15:17', '12/13/2023 15:19',
+  '12/13/2023 15:22', '12/13/2023 15:24',
+  '12/13/2023 15:24', '12/13/2023 15:26'
+) %>%
+  mutate_all(.funs = ~lubridate::as_datetime(., format = '%m/%d/%Y %H:%M'))
+
+
+
+check_crash <- function(start_time, end_time) {
+  survivor <- TRUE
+  for (i in 1:nrow(crash_times)) {
+    if((start_time <= crash_times$start[i]) & (end_time >= crash_times$end[i]))
+      return(FALSE)
+  }
+  return(survivor)
+}
+
+
+survivors <- c()
+survey_df$StartDate
+survey_df$EndDate_pre
+
+end_time <- c()
+survey_df <- survey_df %>%
+  mutate(StartDate = lubridate::as_datetime(StartDate, format = '%m/%d/%Y %H:%M')) %>%
+  mutate(end_time = case_when(
+    !is.na(EndDate_post) ~ lubridate::as_datetime(EndDate_post, format = '%m/%d/%Y %H:%M'),
+    !is.na(EndDate_pre) ~ lubridate::as_datetime(EndDate_pre, format = '%m/%d/%Y %H:%M'),
+    !is.na(EndDate) ~ lubridate::as_datetime(EndDate, format = '%m/%d/%Y %H:%M'),
+    .default = StartDate + lubridate::dseconds(`Duration (in seconds)`)
+  )) %>%
+  mutate(crash_survivor = check_crash(StartDate, end_time))
+```
+
+The crash affected `r nrow(survey_df) - sum(survey_df$crash_survivor)` participants.
 
 
 # Analytical sample definition
@@ -1321,7 +1382,7 @@ ggplot(survey_df) +
 ```
 
 
-```{r ih likes vs total ilkes, echo = TRUE, warning = FALSE}
+```{r ih dislikes vs total dislikes, echo = TRUE, warning = FALSE}
 
 ggplot(survey_df) +
   geom_histogram(aes(x = p_likes_ih, y = ..density.., fill = condition), position = 'identity', alpha = 0.4) +
@@ -1339,7 +1400,7 @@ ggplot(survey_df) +
 ```
 
 ### How does dwell time relate to outcome measures?
-```{r}
+```{r dwell time, message=FALSE, warning=FALSE}
 
 ggplot(survey_df) +
   geom_histogram(aes(x = prop_dwell_time_ih, y = ..density.., fill = condition), alpha = 0.5, position =  'identity') +
@@ -1384,9 +1445,113 @@ survey_df %>%
 
 
 
+# Heterogeneous treatment effects using BART: Installation issues. Can't do `BCF` now
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(dbarts)
+library(fastDummies)
+library(janitor)
+
+outcome_cols <- c('panas', 'panas_pos', 'panas_neg', 'delta_ih', 'affective_polarization', 'extremity_post_less_pre', 'third_order')
+
+cate_survey_df_original_names <- survey_df %>%
+  select(all_of(c(demog_cols, pretreat_cols, outcome_cols, 'condition'))) %>%
+    drop_na()
+cate_survey_df <- cate_survey_df_original_names %>%
+  fastDummies::dummy_columns(select_columns = c(demog_cols, pretreat_cols), 
+                             remove_selected_columns = TRUE) %>%
+  janitor::clean_names()
+  
+
+
+tlearner_bart <- function(x.train_treat, y.train_treat, x.train_control, y.train_control, x.test) {
+  bart_treat <- dbarts::bart(x.train = x.train_treat,
+                             y.train = y.train_treat,
+                             keeptrees = TRUE,
+                             verbose = FALSE)
+  bart_control <- dbarts::bart(x.train = x.train_control,
+                               y.train = y.train_control,
+                               keeptrees = TRUE,
+                               verbose = FALSE)
+  y1 <- predict(bart_treat, x.test)
+  y0 <- predict(bart_control, x.test)
+  return_obj <- list('bart_treat' = bart_treat,
+                     'bart_control' = bart_control,
+                     cate = y1 - y0)
+  return(colMeans(y1) - colMeans(y0))
+}
+
+cate_estimates <- sapply(c('panas', 'panas_neg', 'panas_pos', 'third_order'),
+       function(x) {
+         print(x)
+         y <- tlearner_bart(x.train_treat = cate_survey_df %>% 
+                            filter(condition == 'treat') %>%
+                            select(-outcome_cols) %>%
+                            select(-condition),
+                            y.train_treat = cate_survey_df %>% 
+                              filter(condition == 'treat') %>%
+                              .[[x]],
+                            x.train_control = cate_survey_df %>% 
+                            filter(condition == 'control') %>%
+                            select(-outcome_cols) %>%
+                              select(-condition),
+                            y.train_control = cate_survey_df %>% 
+                              filter(condition == 'control') %>%
+                              .[[x]],
+                            x.test = cate_survey_df %>%
+                              filter(condition != 'pure_control')
+         )
+         return(y)
+       }
+       )
+
+cate_estimates_tbl <- cate_estimates %>%
+  as_tibble() %>%
+  rename(PANAS = panas,
+        `PANAS Neg` = panas_neg,
+        `PANAS Pos` = panas_pos,
+        `3rd Order` = third_order)
+
+cate_full_df <- cate_survey_df_original_names %>%
+  filter(condition != 'pure_control') %>%
+  bind_cols(cate_estimates_tbl)
+
+
+cate_plot <- function(cate_df, conditional, fill_label) {
+  p <- cate_df %>%
+  pivot_longer(cols = colnames(cate_estimates_tbl)) %>%
+  ggplot(.) +
+  geom_boxplot(aes(x = !!as.symbol(conditional), y = value)) +
+  facet_grid(.~name, scales = 'free_y') +
+    labs(y = 'CATE',
+         x = fill_label,
+         title = paste0('CATEs by ', fill_label)) +
+    geom_hline(yintercept = 0, linetype = 'dashed') +
+    theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  
+  cate_df %>%
+    group_by(!!as.symbol(conditional)) %>%
+    summarise_at(.vars = colnames(cate_estimates_tbl), .funs = mean) %>%
+    pander::pander(caption = paste0('CATEs by subgroup: ', fill_label))
+}
+```
+
+```{r plot cates, echo=FALSE, message=FALSE, warning=FALSE}
+cate_plot(cate_full_df, 'pre_ih_binary', 'Pre-treatment IH')
+cate_plot(cate_full_df, 'extremity_pre', 'Pre-treatment Extremity')
+cate_plot(cate_full_df, 'pre_policy_gc_binary', 'Pre-treatment Pro (?) Gun Control')
+cate_plot(cate_full_df, 'pre_policy_imm_binary', 'Pre-treatment Pro (?) Immigration')
+cate_plot(cate_full_df, 'pid3', 'Political Identity')
+cate_plot(cate_full_df %>%
+            mutate(ideo7 = factor(ideo7, 
+                                  levels = c('Extremely conservative',
+                                             'Conservative',
+                                             'Somewhat conservative',
+                                             'Moderate or middle of the road',
+                                             'Somewhat liberal',
+                                             'Liberal',
+                                             'Extremely liberal'))), 'ideo7', 'Political Ideology')
 
 
 
-
-
-
+```
