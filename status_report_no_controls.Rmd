@@ -1,5 +1,5 @@
 ---
-title: "Status Study Report"
+title: "Status Study Report: Excluding pure controls"
 author: "Austin van Loon and Srikar Katta"
 date: "`r Sys.Date()`"
 output: 
@@ -117,11 +117,6 @@ get_state_names <- function(x) {
 }
 ```
 
-# Notes for Austin
-- Why do we drop the following codes? `'a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc'`
-- Survey completion time: we were using `Duration (in seconds)_pre + Duration (in seconds)_post` to calculate survey completion time, but we should be using `intake` and `pretreatment` survey completion times
-- Gold star $n$: 835
-- There are three duplicate `participant_code`s in the `posttreat` survey
 
 
 # Data Quality Checks
@@ -401,7 +396,8 @@ survey_df_new <- posttreat_new %>%
          mc_correct_pure_control = (condition == 'pure_control') * (manip_check == 'There were no user badges on the platform.')) %>%
   mutate(mc_correct = mc_correct_treat + mc_correct_control + mc_correct_pure_control)
 
-survey_df <- survey_df_new
+survey_df <- survey_df_new %>%
+  filter(condition != 'pure_control')
 
 ```
 
@@ -1153,30 +1149,13 @@ pretreat_demogs %>%
 ### Age
 ```{r demog and balance checks, echo=FALSE, message=FALSE, warning=FALSE}
 
-demogs_plot <- function(col, factor_list = NULL, title = NA, balance_all_groups = TRUE) {
-  if(!is.null(factor_list)) {
-    survey_df <- survey_df %>%
-      mutate_at(.vars = c(col), .funs = function(x) factor(x, levels = factor_list))
-  }
-  if(!balance_all_groups) {
-    survey_df <- survey_df %>%
-      filter(condition != 'pure_control')
-  }
+demogs_plot <- function(col, factor_list = NULL, title = NA) {
   if(col %in% c('age', 'therm_diff_pre', 'pre_ih')) {
-  p <- ggplot(survey_df) +
-      geom_histogram(aes_string(x = col, fill = 'condition'), position = 'identity', alpha = 0.5, stat = 'count')
-    if(balance_all_groups) {
-      p_value <- min(ks.test(survey_df[survey_df$condition == 'treat', col],
-                           survey_df[survey_df$condition == 'control', col])$p.value,
-                   ks.test(survey_df[survey_df$condition == 'treat', col],
-                           survey_df[survey_df$condition == 'pure_control', col])$p.value,
-                   ks.test(survey_df[survey_df$condition == 'pure_control', col],
-                           survey_df[survey_df$condition == 'control', col])$p.value
-                   )
-    } else {
-      p_value <-  ks.test(survey_df[survey_df$condition == 'treat', col],
-                           survey_df[survey_df$condition == 'control', col])$p.value
-    }
+    p <- ggplot(survey_df) +
+        geom_histogram(aes_string(x = col, fill = 'condition'), position = 'identity', alpha = 0.5, stat = 'count')
+    p_value <-  ks.test(survey_df[survey_df$condition == 'treat', col],
+                             survey_df[survey_df$condition == 'control', col])$p.value
+
   }
   else {
     p <- ggplot(survey_df) +
@@ -1201,6 +1180,35 @@ demogs_plot <- function(col, factor_list = NULL, title = NA, balance_all_groups 
   return(p)
 }
 
+balance_table <- function(col, factor_list = NULL, title = NA) {
+  if(col %in% c('age', 'therm_diff_pre', 'pre_ih')) {
+    p <- ggplot(survey_df) +
+        geom_histogram(aes_string(x = col, fill = 'condition'), position = 'identity', alpha = 0.5, stat = 'count')
+    p_value <-  ks.test(survey_df[survey_df$condition == 'treat', col],
+                             survey_df[survey_df$condition == 'control', col]) %>%
+      .$p.value
+    test_run <- 'KS test'
+  }
+  else {
+    p <- ggplot(survey_df) +
+      geom_histogram(aes_string(x = col, fill = 'condition'), position = 'dodge2', stat = 'count')
+    p_value <- survey_df %>%
+      group_by(condition, (!!as.symbol(col))) %>%
+      count() %>%
+      pivot_wider(id_cols = 'condition', names_from = col, values_from = 'n') %>%
+      ungroup() %>%
+      column_to_rownames('condition') %>%
+      as.matrix() %>%
+      chisq.test() %>%
+      .$p.value
+    test_run <- 'Chi squared'
+  }
+  balance_table <- tribble(~Variable, ~Test, ~`p value`,
+                           title, test_run, p_value)
+  return(balance_table)
+}
+
+
 demogs_plot('race_new', title = 'Race')
 demogs_plot('age', title = 'Age')
 
@@ -1224,19 +1232,19 @@ demogs_plot('new_educ', c('Less than high school',
                           'Post-graduate degree'),
             'Education')
 
-demogs_plot('race_new', title = 'Race', balance_all_groups = FALSE)
-demogs_plot('age', title = 'Age', balance_all_groups = FALSE)
-demogs_plot('pid3', c('Democrat', 'Independent', 'Republican', 'Other'), title = 'Political Identity', balance_all_groups = FALSE)
+demogs_plot('race_new', title = 'Race')
+demogs_plot('age', title = 'Age')
+demogs_plot('pid3', c('Democrat', 'Independent', 'Republican', 'Other'), title = 'Political Identity')
 demogs_plot('pid7', c('Strong Democrat',
                        'Weak Democrat',
                        'Lean Democrat',
                        'True Independent/Other',
                        'Lean Republican',
                        'Weak Republican',
-                       'Strong Republican'), title = 'Political Identity', balance_all_groups = FALSE)
+                       'Strong Republican'), title = 'Political Identity')
 demogs_plot('ideo7',
             c('Extremely liberal', 'Liberal', 'Somewhat liberal', 'Moderate or middle of the road', 'Somewhat conservative', 'Conservative', 'Extremely conservative'),
-            'Ideology', balance_all_groups = FALSE)
+            'Ideology')
 
 demogs_plot('new_educ', c('Less than high school',
                           'High school graduate or equivalent (GED)',
@@ -1244,12 +1252,216 @@ demogs_plot('new_educ', c('Less than high school',
                           'Associate degree in college',
                           'Bachelor’s degree',
                           'Post-graduate degree'),
-            'Education', balance_all_groups = FALSE)
-demogs_plot('therm_diff_pre', NULL, 'Pre-treatment affective polarization', balance_all_groups = FALSE)
-demogs_plot('pre_ih', NULL, 'Pre-treatment intellectual humility', balance_all_groups = FALSE)
-demogs_plot('pre_policy_gc', NULL, 'Pre-treatment gun control views', balance_all_groups = FALSE)
-demogs_plot('pre_policy_imm', NULL, 'Pre-treatment immigration views', balance_all_groups = FALSE)
+            'Education')
+demogs_plot('therm_diff_pre', NULL, 'Pre-treatment affective polarization')
+demogs_plot('pre_ih', NULL, 'Pre-treatment intellectual humility')
+demogs_plot('pre_policy_gc', NULL, 'Pre-treatment gun control views')
+demogs_plot('pre_policy_imm', NULL, 'Pre-treatment immigration views')
+
+
+survey_df %>%
+  group_by(condition, bots) %>%
+  count() %>%
+  pivot_wider(id_cols = bots, names_from = condition, values_from = n) %>%
+  ungroup() %>%
+  mutate(control = round(control/sum(control) * 100, 2) %>% paste0(., '%'),
+         treat = round(treat/sum(treat) * 100, 2) %>% paste0(., '%'))
+
+
+
+
+demogs_plot('race_new', title = 'Race')
+demogs_plot('age', title = 'Age')
+
+demogs_plot('pid3', c('Democrat', 'Independent', 'Republican', 'Other'), title = '3 point Political Identity')
+demogs_plot('pid7', c('Strong Democrat',
+                       'Weak Democrat',
+                       'Lean Democrat',
+                       'True Independent/Other',
+                       'Lean Republican',
+                       'Weak Republican',
+                       'Strong Republican'), title = '7 point Political Identity')
+demogs_plot('ideo7',
+            c('Extremely liberal', 'Liberal', 'Somewhat liberal', 'Moderate or middle of the road', 'Somewhat conservative', 'Conservative', 'Extremely conservative'),
+            'Ideology')
+
+demogs_plot('new_educ', c('Less than high school',
+                          'High school graduate or equivalent (GED)',
+                          'Some college but no degree',
+                          'Associate degree in college',
+                          'Bachelor’s degree',
+                          'Post-graduate degree'),
+            'Education')
+
+bind_rows(balance_table('race_new', title = 'Race')) %>%
+  bind_rows(balance_table('age', title = 'Age')) %>%
+  bind_rows(balance_table('pid3', c('Democrat', 'Independent', 'Republican', 'Other'), title = '3 point Political Identity')) %>%
+  bind_rows(balance_table('pid7', c('Strong Democrat',
+                         'Weak Democrat',
+                         'Lean Democrat',
+                         'True Independent/Other',
+                         'Lean Republican',
+                         'Weak Republican',
+                         'Strong Republican'), title = '7 point Political Identity')) %>%
+  bind_rows(balance_table('ideo7',
+              c('Extremely liberal', 'Liberal', 'Somewhat liberal', 'Moderate or middle of the road', 'Somewhat conservative', 'Conservative', 'Extremely conservative'),
+              'Ideology')) %>%
+  bind_rows(balance_table('new_educ', c('Less than high school',
+                            'High school graduate or equivalent (GED)',
+                            'Some college but no degree',
+                            'Associate degree in college',
+                            'Bachelor’s degree',
+                            'Post-graduate degree'),
+              'Education')) %>%
+  bind_rows(balance_table('therm_diff_pre', NULL, 'Pre-treatment affective polarization')) %>%
+  bind_rows(balance_table('pre_ih', NULL, 'Pre-treatment intellectual humility')) %>%
+  bind_rows(balance_table('pre_policy_gc', NULL, 'Pre-treatment gun control views')) %>%
+  bind_rows(balance_table('pre_policy_imm', NULL, 'Pre-treatment immigration views')) %>%
+  mutate(`p value` = round(`p value`, 3)) %>%
+  arrange(Test) %>%
+  stargazer::stargazer(title = 'Balance table comparing treated and control conditions using either $\\chi^2$ or Kolmogorov-Smirnov tests.', 
+                       rownames = FALSE, 
+                       summary = FALSE)
+
 ```
+
+
+```{r}
+cont_cols <- c('Social Media Use', 'Age', 'Pretreat IH', 'Posttreat IH', 'Pretreat Aff. Pol (Ingroup - outgroup)', 'Posttreat Aff. Pol (Ingroup - outgroup)', 'PANAS', 'Users', 'Platforms')
+
+survey_df %>%
+  mutate(therm_diff_post = ingroup_therm_post - outgroup_therm_post) %>%
+  rename(`Social Media Use` = social_media_sum,
+         Age = age,
+         `Pretreat IH` = pre_ih,
+         `Posttreat IH` = post_ih,
+         `Pretreat Aff. Pol (Ingroup - outgroup)` = therm_diff_pre,
+         `Posttreat Aff. Pol (Ingroup - outgroup)` = therm_diff_post,
+         PANAS = panas,
+         Users = users,
+         Platforms = platforms
+         ) %>%
+  select(cont_cols, 'participant_code') %>%
+  pivot_longer(cols = -participant_code) %>%
+  group_by(name) %>%
+  summarize(Mean = mean(value, na.rm = TRUE) %>% round(., 2),
+            `Observed Range` = paste0('[', round(min(value, na.rm = TRUE), 2), ',', round(max(value, na.rm = TRUE), 2),']'),
+            SD = sd(value, na.rm = TRUE) %>% round(., 2),
+            `#Missing` = sum(is.na(value))) %>%
+  rename(Variable = name) %>%
+  stargazer::stargazer(summary = FALSE, caption = 'Descriptive statistics for Continuous variables', format = 'latex')
+
+
+cat_cols <- c('Apple (vs Android)', 'Race', 'Party ID (3 Point)')
+
+find_mode <- function(x) {
+  u <- unique(x)
+  tab <- tabulate(match(x, u))
+  u[tab == max(tab)]
+}
+
+survey_df %>%
+  # mutate(device_apple = (device == 'Apple iPhone'),
+  #        race_white = ) %>%
+  rename(
+    `Apple (vs Android)` = device,
+    Race = race_new,
+    `Party ID (3 Point)` = pid3
+  ) %>%
+  select(c(cat_cols, 'participant_code')) %>%
+  pivot_longer(cols = -participant_code) %>%
+  group_by(name) %>%
+  mutate(Mode = find_mode(value)) %>%
+  group_by(name, Mode) %>%
+  summarize(mode_prop = round(mean(value == Mode) * 100, 2),
+            Values = n_distinct(value),
+            `#Missing` = sum(is.na(value))) %>%
+  ungroup() %>%
+  mutate(Mode = paste0(Mode, ' (', mode_prop, '%)')) %>%
+  rename(Variable = name) %>%
+  select(-mode_prop) %>%
+  stargazer::stargazer(summary = FALSE, rownames = FALSE)
+
+ordinal_vars <-
+  c(
+    'Facebook',
+    'Instagram',
+    'TikTok',
+    'X',
+    'Truth Social',
+    'Party ID (7-point)',
+    # 'Ideology',
+    # 'Education',
+    # 'Political Interest',
+    'Pre Imm. Policy',
+    'Pre GC Policy',
+    'PANAS Active',
+    'PANAS Attentive',
+    'PANAS Alert',
+    'PANAS Determined',
+    'PANAS Inspired',
+    'PANAS Hostile',
+    'PANAS Ashamed',
+    'PANAS Upset',
+    'PANAS Afraid',
+    'PANAS Nervous',
+    'Users Polite',
+    'Users Aggressive',
+    'Users Tolerant',
+    'Engaging',
+    'Toxic',
+    'Exhausting',
+    'Future Use',
+    # 'Comf. Sharing',
+    # 'Bots',
+    'Third order')
+survey_df %>%
+  mutate(`Facebook` = platforms_fb,
+         `Instagram` = platforms_insta,
+         `TikTok` = platforms_tiktok,
+         `X` = platforms_x,
+         `Truth Social` = platforms_truth,
+         `Party ID (7-point)` = pid7_num,
+         # `Ideology` = ideo7_num,
+         # `Education` = new_educ,
+         # `Political Interest` = political_interest,
+         `Pre Imm. Policy` = pre_policy_imm,
+         # `Post Imm Policy`. ,
+         `Pre GC Policy` = pre_policy_gc,
+         # `Post GC Policy`,
+         `PANAS Active` = panas_active,
+         `PANAS Attentive` = panas_attentive,
+         `PANAS Alert` = panas_alert,
+         `PANAS Determined` = panas_determined,
+         `PANAS Inspired` = panas_inspired,
+         `PANAS Hostile` = panas_hostile,
+         `PANAS Ashamed` = panas_ashamed,
+         `PANAS Upset` = panas_upset,
+         `PANAS Afraid` = panas_afraid,
+         `PANAS Nervous` = panas_nervous,
+         `Users Polite` = polite,
+         `Users Aggressive` = aggressive,
+         `Users Tolerant` = tolerant,
+         `Engaging` = engaging,
+         `Toxic` = toxic,
+         `Exhausting` = exhausting,
+         `Future Use` = future_use_n,
+         # `Comf. Sharing` = comfort_sharing,
+         # `Bots` = bots,
+         `Third order` = third_order
+  ) %>%
+  select(c(ordinal_vars, 'participant_code')) %>%
+  pivot_longer(-participant_code) %>%
+  group_by(name) %>%
+  summarize(Median = median(value, na.rm = TRUE),
+            Range = paste0('[', min(value), ',', max(value), ']'),
+            `(25th, 75th)` = paste0('[', quantile(value, 0.25), ',', quantile(value, 0.75), ']'),
+            `#Missing` = sum(is.na(value))
+            ) %>%
+  stargazer::stargazer(type = 'latex', title = 'Summary statistics for ordinal variables', summary = FALSE, rownames = FALSE)
+
+```
+
 
 
 <!-- # Attrition Checks -->
@@ -1748,7 +1960,6 @@ cate_plot(cate_full_df %>%
 #   coord_flip()
 
 ```
-
 
 
 ```{r}
