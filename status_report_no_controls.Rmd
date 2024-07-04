@@ -138,9 +138,12 @@ posttreat <- read_csv('./Status Study 12-12-selected/post.csv') %>%
   mutate(panas = panas_pos - panas_neg)
 
 
-intake_new <- intake
-pretreat_new <- pretreat
-posttreat_new <- posttreat
+intake_new <- intake %>% filter(!(participant_code %in% participant_code_drops))
+pretreat_new <- pretreat %>% filter(!(participant_code %in% participant_code_drops))
+posttreat_new <- posttreat %>% filter(!(participant_code %in% participant_code_drops))
+
+
+total_n <- nrow(intake_new) # this is the total number of people who started the survey that did not have a survey re-entrance glitch
 
 # make a new race variable
 intake_new <- intake_new %>%
@@ -358,8 +361,8 @@ posttreat_new <- posttreat_new %>%
                                   'Strongly disagree' ~ 3)))
 
 survey_df_new <- posttreat_new %>%
-  inner_join(pretreat_new, by = 'participant_code', suffix = c('_post', '_pre')) %>%
-  inner_join(intake_new %>% filter(!is.na(participant_code)), # drop participants without a participant code
+  left_join(pretreat_new, by = 'participant_code', suffix = c('_post', '_pre')) %>%
+  left_join(intake_new %>% filter(!is.na(participant_code)), # drop participants without a participant code
              by = 'participant_code') %>%
   # drop participants in the code drop list
   filter(!(participant_code %in% participant_code_drops)) %>%
@@ -399,7 +402,11 @@ survey_df_new <- posttreat_new %>%
 survey_df <- survey_df_new %>%
   filter(condition != 'pure_control')
 
+
 ```
+
+
+
 
 ```{r load engagement data, message = FALSE, warning = FALSE, include = FALSE}
 ih_posts <- c(
@@ -591,55 +598,93 @@ survey_df <- survey_df %>%
 #   filter(Progress >= 93) %>%
 #   nrow()
 
+intake_dropped_participants <- intake_new %>%
+  filter(!(participant_code %in% participant_code_drops))
 
-total_n <- nrow(intake_new)
-consent_drop <- intake_new %>% filter(Consent == 'No, I do NOT consent') %>% nrow()
+pretreat_dropped_participants <- pretreat_new %>%
+  filter(!(participant_code %in% participant_code_drops))
+
+posttreat_dropped_participants <- posttreat_new %>%
+  filter(!(participant_code %in% participant_code_drops)) %>%
+  inner_join(pretreat_dropped_participants %>% 
+               filter(!is.na(`Q111_Page Submit`)) %>%
+               select(participant_code, treatment_arm), by = 'participant_code')
+
+
+total_n <- nrow(intake_dropped_participants)
+consent_drop <- intake_dropped_participants %>% filter(Consent == 'No, I do NOT consent') %>% nrow()
 jive_drop <-
-  intake_new %>% filter((platforms_jive == 'A lot') |
-                          (platforms_jive == 'Some')) %>% nrow()
-device_drop <- intake_new %>%
+  intake_dropped_participants %>% 
+  filter((platforms_jive == 2) |
+                          (platforms_jive == 1)) %>% nrow()
+device_drop <- intake_dropped_participants %>%
   filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
   nrow()
 
-download_drop <- intake_new %>%
+download_drop <- intake_dropped_participants %>%
   filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
   nrow()
 
-image_drop <- intake_new %>%
+image_drop <- intake_dropped_participants %>%
   filter(screen_image != 3.0) %>%
   filter(!is.na(screen_image)) %>%
   nrow()
 
-age_drop <- intake_new %>%
+age_drop <- intake_dropped_participants %>%
   filter(age < 18) %>%
   filter(!is.na(age)) %>% 
   nrow()
 
-us_drop <- intake_new %>%
+us_drop <- intake_dropped_participants %>%
   filter(state == "I do not reside in the United States") %>%
   nrow()
 
 forced_attrit <- consent_drop + jive_drop + device_drop + download_drop + image_drop + age_drop + us_drop
 
-intake_completes <- intake_new %>%
+intake_completes <- intake_dropped_participants %>%
   filter(!is.na(participant_code)) %>%
   nrow()
 
-total_attrit_intake_new <- total_n - intake_completes - forced_attrit
+total_attrit_intake_dropped_participants <- total_n - intake_completes - forced_attrit
 
-pretreat_n <- pretreat_new %>% nrow()
+pretreat_n <- pretreat_dropped_participants %>% nrow()
 attrit_intake_pretreat <- intake_completes - pretreat_n
 
-pretreat_completes <- pretreat_new %>%
+pretreat_completes <- pretreat_dropped_participants %>%
   filter(!is.na(`Q111_Page Submit`)) %>%
   nrow()
 
-posttreat_n <- posttreat_new %>% nrow()
+posttreat_n <- posttreat_dropped_participants %>% 
+  select(participant_code) %>%
+  unique() %>% 
+  nrow()
 
 attrit_pre_post <- pretreat_completes - posttreat_n
 
-posttreat_completes <- posttreat_new %>%
-  filter(Progress >= 93) %>%
+posttreat_completes_df <- posttreat_dropped_participants %>%
+  filter(Progress >= 93)
+
+posttreat_completes <- posttreat_completes_df %>% 
+  select(participant_code) %>%
+  unique() %>% 
+  nrow()
+
+posttreat_completes_pure_control <- posttreat_completes_df %>%
+  filter(str_detect(treatment_arm, 'pc')) %>%
+  select(participant_code) %>%
+  unique() %>% 
+  nrow()
+
+posttreat_completes_control <- posttreat_completes_df %>%
+  filter(str_detect(treatment_arm, 'control')) %>%
+  select(participant_code) %>%
+  unique() %>% 
+  nrow()
+
+posttreat_completes_treated <- posttreat_completes_df %>% 
+  filter(str_detect(treatment_arm, 'treat')) %>%
+  select(participant_code) %>%
+  unique() %>% 
   nrow()
 
 
@@ -660,7 +705,10 @@ nodes <- tribble(
   'Did not finish pre-treat' , 4,
   'Started post-treat' , 5,
   'Lost during newsfeed', 5,
-  'Finished post-treat', 6
+  'Finished post-treat', 6,
+  'Final treated', 7,
+  'Final control', 7,
+  'Final pure control', 7
   ) %>%
   rownames_to_column(var = 'node_index') %>%
   mutate(node_index = as.numeric(node_index) - 1) %>%
@@ -678,7 +726,9 @@ sankey_df <- tribble(
   'Finished pre-treat', 'Started post-treat', posttreat_n,
   'Finished pre-treat', 'Lost during newsfeed', pretreat_completes - posttreat_n,
   'Started post-treat', 'Finished post-treat', posttreat_completes,
-  # 'Finished post-treat', NA, NA
+  'Finished post-treat', 'Final treated', posttreat_completes_treated,
+  'Finished post-treat', 'Final control', posttreat_completes_control,
+  'Finished post-treat', 'Final pure control', posttreat_completes_pure_control
 ) %>%
   left_join(nodes, by = c('start' = 'node')) %>%
   rename('start_index' = 'node_index') %>%
@@ -688,7 +738,12 @@ sankey_df <- tribble(
 
 sankey_plot <- networkD3::sankeyNetwork(
   Links = sankey_df,
-  Nodes = nodes,
+  Nodes = sankey_df %>%
+            select(end, end_index, stage.y, n) %>%
+            full_join(., nodes, by = c('end' = 'node')) %>%
+            mutate(n = ifelse(is.na(n), total_n, n)) %>%
+            mutate(node = paste0(end, ': ', n)) %>%
+            arrange(node_index),
   Source = "start_index",
   Target = "end_index",
   Value = "n",
@@ -703,31 +758,31 @@ sankey_plot <- networkD3::sankeyNetwork(
 
 saveNetwork(sankey_plot, "./sn1.html")
 # webshot::install_phantomjs()
-webshot("sn1.html", "sn1.png", vwidth = 1500, vheight = 500)
+webshot("sn1.html", "attrition_overall.png", vwidth = 2000, vheight = 500)
 
 ```
 
 
 ```{r attrition through intake, echo=TRUE, message=FALSE, warning=FALSE, results='asis'}
-n_consented <- intake %>% filter(Consent != 'No, I do NOT consent') %>% nrow()
-n_does_not_use_jivehive <- intake %>% 
-  filter(platforms_jive != 'A lot') %>%
-  filter(platforms_jive != 'Some') %>%
+n_consented <- intake_new %>% filter(Consent != 'No, I do NOT consent') %>% nrow()
+n_does_not_use_jivehive <- intake_new %>% 
+  filter(platforms_jive != 1) %>%
+  filter(platforms_jive != 2) %>%
   nrow()
-n_lives_in_us <- intake %>%
+n_lives_in_us <- intake_new %>%
   filter(state != 'I do not reside in the United States') %>%
   nrow()
-n_age_gr_18 <- intake %>%
+n_age_gr_18 <- intake_new %>%
   filter(age >= 18) %>%
   nrow()
-n_android_iphone_user <- intake %>%
+n_android_iphone_user <- intake_new %>%
   filter(device != 'Something else') %>%
   nrow()
-n_will_download_app <- intake %>%
-  filter(download_apple != 'No, I am NOT') %>%
-  filter(download_android != 'No, I am NOT') %>%
+n_will_download_app <- intake_new %>%
+  filter((download_apple != 'No, I am NOT') | (download_android != 'No, I am NOT')) %>%
+  # filter() %>%
   nrow()
-n_passed_3_att_check <- intake %>%
+n_passed_3_att_check <- intake_new %>%
   filter(!is.na(screen_image)) %>%
   filter(screen_image == 3) %>%
   nrow()
@@ -751,7 +806,7 @@ intake_drops_nodes <- tribble(
   "Passed `3` attention check", 8,
   "Failed `3` attention check", 8,
   "Unforced attrition", 9,
-  "Completed intake", 9
+  "Finished intake", 9
 ) %>%
   rownames_to_column(var = 'node_index') %>%
   mutate(node_index = as.numeric(node_index) - 1) %>%
@@ -773,7 +828,7 @@ intake_drops_df <- tribble(
   'Download app', 'Passed `3` attention check', n_passed_3_att_check,
   'Download app', 'Failed `3` attention check', n_will_download_app - n_passed_3_att_check,
   'Passed `3` attention check', 'Unforced attrition', total_n - intake_completes - forced_attrit,
-  'Passed `3` attention check', 'Completed intake', intake_completes
+  'Passed `3` attention check', 'Finished intake', intake_completes
 ) %>%
   left_join(intake_drops_nodes, by = c('start' = 'node')) %>%
   rename('start_index' = 'node_index') %>%
@@ -784,7 +839,12 @@ intake_drops_df <- tribble(
 
 sankey_plot2 <- networkD3::sankeyNetwork(
   Links = intake_drops_df,
-  Nodes = intake_drops_nodes,
+  Nodes = intake_drops_df %>%
+            select(end, end_index, stage.y, n) %>%
+            full_join(., intake_drops_nodes, by = c('end' = 'node')) %>%
+            mutate(n = ifelse(is.na(n), total_n, n)) %>%
+            mutate(node = paste0(end, ': ', n)) %>%
+            arrange(node_index),
   Source = "start_index",
   Target = "end_index",
   Value = "n",
@@ -799,7 +859,7 @@ sankey_plot2 <- networkD3::sankeyNetwork(
 
 saveNetwork(sankey_plot2, "./sn2.html")
 webshot::install_phantomjs()
-webshot("sn2.html", "sn2.png", vwidth = 1500, vheight = 500)
+webshot("sn2.html", "attrition_intake.png", vwidth = 2500, vheight = 500)
 ```
 
 ```{r}
@@ -900,6 +960,8 @@ mutate(stars = case_when(`Pr(>|z|)` <= 0.05 ~ '*',
 #   count()
 
 attrit_regs %>%
+  # stargazer::stargazer(., summary = FALSE, title = 'First column displays covariate/level, second column displays the reference level, and the following columns represent the drop point of investigation. *=p<0.05, **=p<0.01, ***=p<0.001.', format = 'latex')
+
   pander::pander(caption = 'First column displays covariate/level, second column displays the reference level, and the following columns represent the drop point of investigation. *=p<0.05, **=p<0.01, ***=p<0.001.')
 
 ```
@@ -986,6 +1048,9 @@ survey_df %>%
   )
 
 sum(survey_df$pretreatment_intake_time <= median(survey_df$pretreatment_intake_time)/2)
+print(median(survey_df$pretreatment_intake_time)/60)
+print(median(survey_df$pretreatment_intake_time)/120)
+print(median(survey_df$pretreatment_intake_time)/240)
 ```
 
 ## Zip code/state matches
@@ -1081,7 +1146,8 @@ glm(
   finished_newsfeed ~ factor(pid7) + pass_zip_check + speeder,
   family = 'binomial',
   data = pretreat_demogs
-)
+) %>%
+  summary()
 ```
 
 ### Bonus word check
@@ -1122,6 +1188,14 @@ ggplot(survey_df) +
 
 ```{r participant check, message = FALSE, warning = FALSE, echo = FALSE}
 survey_df %>%
+  group_by(!speeder, pass_zip_check) %>%
+  count() %>%
+  rename(`Did not speed` = `!speeder`,
+         `Zip code state = Reported state` = pass_zip_check) %>%
+  arrange(-n) %>%
+  pander::pander()
+
+survey_df %>%
   group_by(!speeder, pass_zip_check, correct_bonus, (mc_correct == 1), participant_commented, participant_posted) %>%
   count() %>%
   rename(`Did not speed` = `!speeder`,
@@ -1143,6 +1217,8 @@ pretreat_demogs %>%
   glm(formula = 'finished_newsfeed ~ ideo7 + pass_zip_check + speeder', family = 'binomial', data = .) %>%
   summary()
 ```
+
+
 
 
 ## Demographic/Balance checks
@@ -1273,14 +1349,14 @@ survey_df %>%
 demogs_plot('race_new', title = 'Race')
 demogs_plot('age', title = 'Age')
 
-demogs_plot('pid3', c('Democrat', 'Independent', 'Republican', 'Other'), title = '3 point Political Identity')
+demogs_plot('pid3', c('Democrat', 'Independent', 'Republican', 'Other'), title = '3 point Party Identity')
 demogs_plot('pid7', c('Strong Democrat',
                        'Weak Democrat',
                        'Lean Democrat',
                        'True Independent/Other',
                        'Lean Republican',
                        'Weak Republican',
-                       'Strong Republican'), title = '7 point Political Identity')
+                       'Strong Republican'), title = '7 point Party Identity')
 demogs_plot('ideo7',
             c('Extremely liberal', 'Liberal', 'Somewhat liberal', 'Moderate or middle of the road', 'Somewhat conservative', 'Conservative', 'Extremely conservative'),
             'Ideology')
@@ -1295,14 +1371,14 @@ demogs_plot('new_educ', c('Less than high school',
 
 bind_rows(balance_table('race_new', title = 'Race')) %>%
   bind_rows(balance_table('age', title = 'Age')) %>%
-  bind_rows(balance_table('pid3', c('Democrat', 'Independent', 'Republican', 'Other'), title = '3 point Political Identity')) %>%
+  bind_rows(balance_table('pid3', c('Democrat', 'Independent', 'Republican', 'Other'), title = '3 point Party Identity')) %>%
   bind_rows(balance_table('pid7', c('Strong Democrat',
                          'Weak Democrat',
                          'Lean Democrat',
                          'True Independent/Other',
                          'Lean Republican',
                          'Weak Republican',
-                         'Strong Republican'), title = '7 point Political Identity')) %>%
+                         'Strong Republican'), title = '7 point Party Identity')) %>%
   bind_rows(balance_table('ideo7',
               c('Extremely liberal', 'Liberal', 'Somewhat liberal', 'Moderate or middle of the road', 'Somewhat conservative', 'Conservative', 'Extremely conservative'),
               'Ideology')) %>%
@@ -1326,11 +1402,11 @@ bind_rows(balance_table('race_new', title = 'Race')) %>%
 ```
 
 
-```{r}
-cont_cols <- c('Social Media Use', 'Age', 'Pretreat IH', 'Posttreat IH', 'Pretreat Aff. Pol (Ingroup - outgroup)', 'Posttreat Aff. Pol (Ingroup - outgroup)', 'PANAS', 'Users', 'Platforms')
+```{r demographic tables, echo=FALSE, message=FALSE, warning=FALSE}
+cont_cols <- c('Social Media Use', 'Age', 'Pretreat IH', 'Posttreat IH', 'Pretreat Aff. Pol (Ingroup - outgroup)', 'Posttreat Aff. Pol (Ingroup - outgroup)', 'PANAS', 'PANAS Positive', 'PANAS Negative', 'Users', 'Platforms')
 
 survey_df %>%
-  mutate(therm_diff_post = ingroup_therm_post - outgroup_therm_post) %>%
+  mutate(therm_diff_post = (ingroup_therm_post - outgroup_therm_post)/100) %>%
   rename(`Social Media Use` = social_media_sum,
          Age = age,
          `Pretreat IH` = pre_ih,
@@ -1338,6 +1414,8 @@ survey_df %>%
          `Pretreat Aff. Pol (Ingroup - outgroup)` = therm_diff_pre,
          `Posttreat Aff. Pol (Ingroup - outgroup)` = therm_diff_post,
          PANAS = panas,
+         `PANAS Positive` = panas_pos,
+         `PANAS Negative` = panas_neg,
          Users = users,
          Platforms = platforms
          ) %>%
@@ -1349,10 +1427,10 @@ survey_df %>%
             SD = sd(value, na.rm = TRUE) %>% round(., 2),
             `#Missing` = sum(is.na(value))) %>%
   rename(Variable = name) %>%
-  stargazer::stargazer(summary = FALSE, caption = 'Descriptive statistics for Continuous variables', format = 'latex')
+  stargazer::stargazer(., summary = FALSE, title = 'Descriptive statistics for Continuous variables', format = 'latex')
 
 
-cat_cols <- c('Apple (vs Android)', 'Race', 'Party ID (3 Point)')
+cat_cols <- c('Apple (vs Android)', 'Race', 'Political ID (3 Point)')
 
 find_mode <- function(x) {
   u <- unique(x)
@@ -1360,51 +1438,59 @@ find_mode <- function(x) {
   u[tab == max(tab)]
 }
 
+
 survey_df %>%
   # mutate(device_apple = (device == 'Apple iPhone'),
   #        race_white = ) %>%
   rename(
     `Apple (vs Android)` = device,
     Race = race_new,
-    `Party ID (3 Point)` = pid3
+    `Political ID (3 Point)` = pid3
   ) %>%
   select(c(cat_cols, 'participant_code')) %>%
   pivot_longer(cols = -participant_code) %>%
+  # group_by(name) %>%
+  # mutate(Mode = find_mode(value)) %>%
   group_by(name) %>%
-  mutate(Mode = find_mode(value)) %>%
-  group_by(name, Mode) %>%
-  summarize(mode_prop = round(mean(value == Mode) * 100, 2),
-            Values = n_distinct(value),
-            `#Missing` = sum(is.na(value))) %>%
+  mutate(n = n()) %>%
   ungroup() %>%
-  mutate(Mode = paste0(Mode, ' (', mode_prop, '%)')) %>%
+  ungroup() %>%
+  group_by(name, value) %>%
+  summarise(prop = round(n()/n * 100, 2)) %>%
+  unique() %>%
+  # summarize(mode_prop = round(mean(value == Mode) * 100, 2),
+  #           Values = n_distinct(value),
+  #           `#Missing` = sum(is.na(value))) %>%
+  # ungroup() %>%
+  # mutate(Mode = paste0(Mode, ' (', mode_prop, '%)')) %>%
   rename(Variable = name) %>%
-  select(-mode_prop) %>%
+  # select(-mode_prop) %>%
   stargazer::stargazer(summary = FALSE, rownames = FALSE)
 
 ordinal_vars <-
   c(
-    'Facebook',
-    'Instagram',
-    'TikTok',
-    'X',
-    'Truth Social',
+    'Platform: Facebook',
+    'Platform: Instagram',
+    'Platform: TikTok',
+    'Platform: X',
+    'Platform: Truth Social',
     'Party ID (7-point)',
     # 'Ideology',
     # 'Education',
     # 'Political Interest',
-    'Pre Imm. Policy',
-    'Pre GC Policy',
-    'PANAS Active',
-    'PANAS Attentive',
-    'PANAS Alert',
-    'PANAS Determined',
-    'PANAS Inspired',
-    'PANAS Hostile',
-    'PANAS Ashamed',
-    'PANAS Upset',
-    'PANAS Afraid',
-    'PANAS Nervous',
+    'Pretreatment Immigration Policy',
+    'Pretreatment Gun Control Policy',
+    '\\quad 1. PANAS Active',
+    '\\quad 1. PANAS Attentive',
+    '\\quad 1. PANAS Alert',
+    '\\quad 1. PANAS Determined',
+    '\\quad 1. PANAS Inspired',
+    # 'PANAS Negative',
+    '\\quad 2. PANAS Hostile',
+    '\\quad 2. PANAS Ashamed',
+    '\\quad 2. PANAS Upset',
+    '\\quad 2. PANAS Afraid',
+    '\\quad 2. PANAS Nervous',
     'Users Polite',
     'Users Aggressive',
     'Users Tolerant',
@@ -1416,29 +1502,42 @@ ordinal_vars <-
     # 'Bots',
     'Third order')
 survey_df %>%
-  mutate(`Facebook` = platforms_fb,
-         `Instagram` = platforms_insta,
-         `TikTok` = platforms_tiktok,
-         `X` = platforms_x,
-         `Truth Social` = platforms_truth,
+  mutate(`Platform: Facebook` = platforms_fb,
+         `Platform: Instagram` = platforms_insta,
+         `Platform: TikTok` = platforms_tiktok,
+         `Platform: X` = platforms_x,
+         `Platform: Truth Social` = platforms_truth,
          `Party ID (7-point)` = pid7_num,
          # `Ideology` = ideo7_num,
          # `Education` = new_educ,
          # `Political Interest` = political_interest,
-         `Pre Imm. Policy` = pre_policy_imm,
+         `Pretreatment Immigration Policy` = pre_policy_imm,
          # `Post Imm Policy`. ,
-         `Pre GC Policy` = pre_policy_gc,
+         `Pretreatment Gun Control Policy` = pre_policy_gc,
          # `Post GC Policy`,
-         `PANAS Active` = panas_active,
-         `PANAS Attentive` = panas_attentive,
-         `PANAS Alert` = panas_alert,
-         `PANAS Determined` = panas_determined,
-         `PANAS Inspired` = panas_inspired,
-         `PANAS Hostile` = panas_hostile,
-         `PANAS Ashamed` = panas_ashamed,
-         `PANAS Upset` = panas_upset,
-         `PANAS Afraid` = panas_afraid,
-         `PANAS Nervous` = panas_nervous,
+         'Pre GC Policy',
+         # `PANAS Positive` = panas_pos,
+         `\\quad 1. PANAS Active` = panas_active,
+         `\\quad 1. PANAS Attentive` = panas_attentive,
+         `\\quad 1. PANAS Alert` = panas_alert,
+         `\\quad 1. PANAS Determined` = panas_determined,
+         `\\quad 1. PANAS Inspired` = panas_inspired,
+         # `PANAS Negative` = panas_neg,
+         `\\quad 2. PANAS Hostile` = panas_hostile,
+         `\\quad 2. PANAS Ashamed` = panas_ashamed,
+         `\\quad 2. PANAS Upset` = panas_upset,
+         `\\quad 2. PANAS Afraid` = panas_afraid,
+         `\\quad 2. PANAS Nervous` = panas_nervous,
+         # `PANAS Active` = panas_active,
+         # `PANAS Attentive` = panas_attentive,
+         # `PANAS Alert` = panas_alert,
+         # `PANAS Determined` = panas_determined,
+         # `PANAS Inspired` = panas_inspired,
+         # `PANAS Hostile` = panas_hostile,
+         # `PANAS Ashamed` = panas_ashamed,
+         # `PANAS Upset` = panas_upset,
+         # `PANAS Afraid` = panas_afraid,
+         # `PANAS Nervous` = panas_nervous,
          `Users Polite` = polite,
          `Users Aggressive` = aggressive,
          `Users Tolerant` = tolerant,
@@ -1459,6 +1558,40 @@ survey_df %>%
             `#Missing` = sum(is.na(value))
             ) %>%
   stargazer::stargazer(type = 'latex', title = 'Summary statistics for ordinal variables', summary = FALSE, rownames = FALSE)
+```
+
+```{r break down categorical variables, echo=FALSE, message=FALSE, warning=FALSE}
+survey_df %>%
+  group_by(race_new) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(percent = round(n/sum(n) * 100, 2) ) %>%
+  arrange(-n)
+
+survey_df %>%
+  group_by(new_educ) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(percent = round(n/sum(n) * 100, 2) )
+
+survey_df %>%
+  group_by(pid3) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(percent = round(n/sum(n) * 100, 2) )
+
+
+survey_df %>%
+  mutate(ideo3 = case_when(
+    str_detect(ideo7, 'iberal')  ~ 'liberal',
+    str_detect(ideo7, 'onservative')  ~ 'cons',
+    .default = 'moderate'
+  )) %>%
+  group_by(ideo3) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(percent = round(n/sum(n) * 100, 2) )
+
 
 ```
 
@@ -1631,6 +1764,27 @@ main_hypothesis_test(survey_df, 'panas_pos', display_plot = TRUE, title = 'All p
 ## Hypothesis 1C: experience more positive and less negative emotions
 ```{r h1c, echo=FALSE, warning=FALSE}
 main_hypothesis_test(survey_df, 'panas', display_plot = TRUE, title = 'All participants', return_object = FALSE)
+
+
+survey_df %>%
+  select(condition, panas, age, new_educ, race_new) %>%
+  lm(panas ~ ., data = .) %>%
+  summary()
+
+# permutation based inference: 
+set.seed(999)
+bootstrap_est <- c()
+for(b in 1:5000) {
+  survey_b <- survey_df[sample(1:nrow(survey_df), size = nrow(survey_df), replace = F), ]
+  bootstrap_est <- c(bootstrap_est, 
+                     mean(survey_b[survey_df$condition == 'treat', ]$panas) - mean(survey_b[survey_df$condition == 'control', ]$panas))
+}
+
+t_obs <- mean(survey_df[survey_df$condition == 'treat', ]$panas) - mean(survey_df[survey_df$condition == 'control', ]$panas)
+
+mean(bootstrap_est >= t_obs)
+
+c(quantile(bootstrap_est, 0.025), quantile(bootstrap_est, 0.975))
 ```
 
 ## Hypothesis 2: report greater increases in their intellectual humility
@@ -1646,6 +1800,10 @@ main_hypothesis_test(survey_df, 'delta_ih', display_plot = TRUE, title = 'All pa
 ## Hypothesis 5: experience a greater reduction in their affective polarization
 ```{r h5, echo=FALSE, warning=FALSE}
 main_hypothesis_test(survey_df, 'affective_polarization', display_plot = TRUE, title = 'All participants', return_object = FALSE)
+
+main_hypothesis_test(survey_df, 'ingroup_therm_change', display_plot = TRUE, title = 'All participants', return_object = FALSE)
+
+main_hypothesis_test(survey_df, 'outgroup_therm_change', display_plot = TRUE, title = 'All participants', return_object = FALSE)
 ```
 
 ## Hypothesis 6: moderate their issue positions to a greater degree
@@ -1718,10 +1876,16 @@ main_hypothesis_test(survey_df, 'comfort', display_plot = TRUE, title = 'All par
 ### Estimation of bots
 ```{r bot estimation, echo = TRUE, warning = FALSE}
 survey_df %>% 
-  group_by(bots) %>% 
+  mutate(bots = factor(bots, levels = c('No, I did not encounter any bots', 'Yes, I encountered one or two bots', 'Yes, I encountered several bots', 'Yes, I encountered many bots'))) %>%
+  group_by(bots, condition) %>% 
   count() %>%
   ungroup() %>%
-  mutate(prop = round(n/sum(n), 3))
+  group_by(condition) %>%
+  mutate(prop = round(n/sum(n), 4) * 100) %>%
+  pivot_wider(id_cols = 'condition', names_from = 'bots', values_from = 'prop') %>%
+  stargazer::stargazer(title = 'Participants were asked about how many bots they encountered on the platform. The columns represent the response options while the values represent what proportion of individuals selected this response option in each condition.', 
+                       rownames = FALSE, 
+                       summary = FALSE)
 ```
 
 
@@ -1734,6 +1898,7 @@ ggplot(survey_df) +
   labs(x = 'Proportion of liked posts that were IH',
        title = 'Proportion of liked posts that were IH by condition')
 ```
+
 
 
 ```{r ih dislikes vs total dislikes, echo = TRUE, warning = FALSE}
@@ -1797,6 +1962,100 @@ survey_df %>%
             spearman = cor.test(ih_dwell_time, value, method = 'spearman')$estimate  %>% round(., 3)) %>% pander::pander()
 ```
 
+### How does treatment affect future platform usage?
+```{r dwell time, message=FALSE, warning=FALSE}
+survey_df %>%
+  mutate(future_use = factor(future_use, levels = c('Very unlikely', 'Somewhat unlikely', 'Neither unlikely nor likely', 'Somewhat likely', 'Very likely'))) %>%
+  group_by(condition, future_use) %>%
+  count() %>%
+  ungroup() %>%
+  group_by(condition) %>%
+  mutate(prop = round(n/sum(n) * 100, 2)) %>%
+  pivot_wider(id_cols = condition, values_from = prop, names_from = future_use) %>%
+    stargazer::stargazer(title = 'Participants were asked about their likelihoods of using the platform in the future. The columns represent the response options while the values represent what proportion of individuals selected this response option in each condition.', 
+                         label = 'tbl:future_use',
+                       rownames = FALSE, 
+                       summary = FALSE)
+
+```
+
+### How does treatment affect number of likes and dislikes?
+```{r dwell time, message=FALSE, warning=FALSE}
+survey_df %>%
+  mutate(condition = str_to_title(condition)) %>%
+  group_by(condition) %>%
+  summarize(mean_likes = round(mean(total_likes), 2),
+            std_err_likes = sd(total_likes)/sqrt(n()),
+            mean_dislikes = round(mean(total_dislikes), 2),
+            std_err_dislikes = sd(total_dislikes)/sqrt(n()),
+            mean_likes_dislikes = round(mean(total_likes + total_dislikes), 2),
+            std_err_likes_dislikes = sd(total_dislikes)/sqrt(n()),
+            `Avg \\# Likes` = paste0(mean_likes, ' (', round(mean_likes - 1.96 * std_err_likes, 2), ',', round(mean_likes + 1.96 * std_err_likes, 2) ,')'),
+            `Avg \\# Dislikes` = paste0(mean_dislikes, ' (', round(mean_dislikes - 1.96 * std_err_dislikes, 2), ',', round(mean_dislikes + 1.96 * std_err_dislikes, 2) ,')'),
+            `Avg \\#: Likes and Dislikes` = paste0(mean_likes_dislikes, ' (', round(mean_likes_dislikes - 1.96 * std_err_likes_dislikes, 2), ',', round(mean_likes_dislikes + 1.96 * std_err_likes_dislikes, 2) ,')')) %>%
+  select(c(condition, starts_with('Avg'))) %>%
+  pivot_longer(cols = -condition) %>%
+  pivot_wider(id_cols = name, names_from = condition, values_from = value) %>%
+  # pivot_wider(id_cols = condition, values_from = prop, names_from = future_use) %>%
+    stargazer::stargazer(title = 'The table compares the average number of likes and dislikes of others\' posts in the newsfeed by condition.', 
+                         label = 'tbl:likes_dislikes',
+                       rownames = FALSE, 
+                       summary = FALSE)
+```
+
+### How does post length differ between conditions?
+```{r dwell time, message=FALSE, warning=FALSE}
+
+content %>%
+  filter(condition %in% c('control', 'treat')) %>%
+  filter(userContent == 1) %>%
+  mutate(condition = str_to_title(condition)) %>%
+  group_by(condition) %>%
+  summarize(avg = mean(length),
+            std_err = sd(length)/sqrt(n()),
+            `Post length` = paste0(round(avg, 2), ' (', round(avg - 1.96 * std_err, 2), ', ', round(avg + 1.96 * std_err, 2), ')')) %>%
+  select(condition, `Post length`) %>%
+  stargazer::stargazer(title = 'The table compares the average length of posts/comments generated by users on the newfeed between conditions. Values inside parentheses represent 95% confidence intervals.', 
+                         label = 'tbl:post_length',
+                       rownames = FALSE, 
+                       summary = FALSE)
+```
+
+### Affective polarization: how does treatment affect in party vs out party individually?
+
+# Heterogeneous treatment effects using linear model
+```{r}
+outcome_cols <- c('panas', 'panas_pos', 'panas_neg', 'delta_ih', 'extremity_post_less_pre', 'third_order')
+hte_lm_list <- list()
+for(i in 1:length(outcome_cols)) {
+  hte_lm_pid7 <- lm(paste0(outcome_cols[i], ' ~ Treat + Democrat + Treat * Democrat'), 
+                    survey_df %>% 
+                    filter(pid7 != 'True Independent/Other') %>%
+                      mutate(Democrat = str_count(pid7, 'Democrat')) %>%
+                      mutate(Treat = as.integer(condition == 'treat')))
+  hte_lm_list[[i]] <- hte_lm_pid7
+}
+stargazer_output_pid7 <- capture.output(stargazer::stargazer(hte_lm_list, type = 'latex', title = 'HTE by 7 point Party ID'))
+stargazer_output_pid7 <- gsub(':', '*', stargazer_output_pid7)
+stargazer_output_pid7 <- gsub('pid7', '', stargazer_output_pid7)
+stargazer_output_pid7 <- sapply(stargazer_output_pid7, FUN = function(x) paste0(x, '\n'))
+cat(stargazer_output_pid7)
+
+hte_lm_ih_list <- list()
+for(i in 1:length(outcome_cols)) {
+  hte_lm_ih_list[[i]] <- lm(paste0(outcome_cols[i], ' ~ Treat + `High IH` + Treat * `High IH`'), survey_df %>% mutate(Treat = as.integer(condition == 'treat'), `High IH` = pre_ih_binary))
+}
+
+stargazer_output_ih <- capture.output(stargazer::stargazer(hte_lm_ih_list, type = 'latex', title = 'HTE by Pre-treatment IH'))
+stargazer_output_ih <- gsub(':', '*', stargazer_output_ih)
+stargazer_output_ih <- gsub('`', '', stargazer_output_ih)
+stargazer_output_ih <- sapply(stargazer_output_ih, FUN = function(x) paste0(x, '\n'))
+cat(stargazer_output_ih)
+
+
+
+```
+
 
 
 # Heterogeneous treatment effects using BART: Installation issues. Can't do `BCF` now
@@ -1816,7 +2075,7 @@ outcome_cols <- c('panas', 'panas_pos', 'panas_neg', 'delta_ih', 'extremity_post
 
 cate_survey_df_original_names <- survey_df %>%
   # select(all_of(c(demog_cols, pretreat_cols, outcome_cols, 'condition', 'pre_ih', 'age', 'pid7', 'therm_diff_pre', 'pid_extremity'))) %>%
-  select(all_of(c(demog_cols, pretreat_cols, outcome_cols, 'condition', 'pre_ih', 'age', 'pid7', 'pid_extremity', 'bots'))) %>%
+  select(all_of(c(demog_cols, pretreat_cols, outcome_cols, 'condition', 'pre_ih', 'age', 'pid7', 'pid_extremity', 'bots', 'topic', 'crash_survivor'))) %>%
     drop_na()
 
 cate_survey_df <- cate_survey_df_original_names %>%
@@ -1917,6 +2176,7 @@ cate_plot <- function(cate_df, conditional, fill_label, scatter = FALSE) {
 ```
 
 ```{r plot cates, echo=FALSE, message=FALSE, warning=FALSE}
+cate_plot(cate_full_df, 'topic', 'Topic', scatter = FALSE)
 cate_plot(cate_full_df, 'pre_ih', 'Pre-treatment IH', scatter = TRUE)
 cate_plot(cate_full_df, 'age', 'Age', scatter = TRUE)
 cate_plot(cate_full_df, 'social_media_high', 'High social media')
@@ -1933,6 +2193,7 @@ cate_plot(cate_full_df, 'extremity_pre', 'Pre-treatment Extremity', scatter = TR
 cate_plot(cate_full_df, 'pre_policy_gc_binary', 'Pre-treatment Pro (?) Gun Control')
 cate_plot(cate_full_df, 'pre_policy_imm_binary', 'Pre-treatment Pro (?) Immigration')
 cate_plot(cate_full_df, 'pid3', 'Political Identity')
+cate_plot(cate_full_df, 'crash_survivor', 'Crash Survivor')
 cate_plot(cate_full_df %>%
             mutate(ideo7 = factor(ideo7, 
                                   levels = c('Extremely conservative',
