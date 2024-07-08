@@ -924,6 +924,22 @@ pretreat_demogs %>%
 
 ```
 
+```{r are treated respondents more likely to drop during the newsfeed (written by Chris)}
+pretreat_demogs %>%
+  mutate(condition = case_when(
+    str_ends(treatment_arm, 'pc') ~ 'pure_control',
+    str_ends(treatment_arm, 'treat') ~ 'treat',
+    str_detect(treatment_arm, 'control') ~ 'control',
+    .default = NA)
+  ) %>%
+  mutate(ideo7 = as.factor(ideo7)) %>%
+  filter(!is.na(ideo7)) %>%
+  glm(formula = "finished_newsfeed ~ condition", family = 'binomial') %>%
+  summary() %>%
+  pander::pander(caption = 'No significant difference between newsfeed dropout based on treatment condition')
+
+```
+
 ```{r}
 
 crash_times <- tribble(
