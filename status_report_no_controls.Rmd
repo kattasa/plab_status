@@ -456,7 +456,7 @@ count_tokens <- function(x) {
     return()
 }
 content <- posts %>%
-  filter(userContent == 1) %>%
+  # filter(userContent == 1) %>% # uncomment if you want to look at only participants with 1+ comment or text
   mutate(length = count_tokens(postOrCommentText)) %>%
   mutate(this_is_a_comment = (parentPost != 'N/A'),
          this_is_a_post = (parentPost == 'N/A'))
@@ -467,6 +467,8 @@ post_vader_df <- vader::vader_df(content$postOrCommentText) %>%
   rename(sent_pos = pos,
          sent_neg = neg,
          sent = compound)
+
+
 content_vader <- content %>%
   bind_cols(post_vader_df) %>%
   select(participantCode, sent_pos, sent_neg, sent)
@@ -618,7 +620,7 @@ jive_drop <-
   filter((platforms_jive == 2) |
                           (platforms_jive == 1)) %>% nrow()
 device_drop <- intake_dropped_participants %>%
-  filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>%
+  filter((device == 'No, I am NOT') | (device == 'No, I am NOT')) %>%
   nrow()
 
 download_drop <- intake_dropped_participants %>%
@@ -765,28 +767,47 @@ webshot("sn1.html", "attrition_overall.png", vwidth = 2000, vheight = 500)
 
 ```{r attrition through intake, echo=TRUE, message=FALSE, warning=FALSE, results='asis'}
 n_consented <- intake_new %>% filter(Consent != 'No, I do NOT consent') %>% nrow()
-n_does_not_use_jivehive <- intake_new %>% 
+n_does_not_use_jivehive <- intake_new %>% filter(Consent != 'No, I do NOT consent') %>% 
   filter(platforms_jive != 1) %>%
   filter(platforms_jive != 2) %>%
   nrow()
-n_lives_in_us <- intake_new %>%
+n_lives_in_us <- intake_new %>% filter(Consent != 'No, I do NOT consent') %>% 
+  filter(platforms_jive != 1) %>%
+  filter(platforms_jive != 2) %>%
   filter(state != 'I do not reside in the United States') %>%
   nrow()
-n_age_gr_18 <- intake_new %>%
+n_age_gr_18 <- intake_new %>% filter(Consent != 'No, I do NOT consent') %>% 
+  filter(platforms_jive != 1) %>%
+  filter(platforms_jive != 2) %>%
+  filter(state != 'I do not reside in the United States') %>%
   filter(age >= 18) %>%
   nrow()
-n_android_iphone_user <- intake_new %>%
+n_android_iphone_user <- intake_new %>% filter(Consent != 'No, I do NOT consent') %>% 
+  filter(platforms_jive != 1) %>%
+  filter(platforms_jive != 2) %>%
+  filter(state != 'I do not reside in the United States') %>%
+  filter(age >= 18) %>%
   filter(device != 'Something else') %>%
   nrow()
-n_will_download_app <- intake_new %>%
+n_will_download_app <- intake_new %>% filter(Consent != 'No, I do NOT consent') %>% 
+  filter(platforms_jive != 1) %>%
+  filter(platforms_jive != 2) %>%
+  filter(state != 'I do not reside in the United States') %>%
+  filter(age >= 18) %>%
+  filter(device != 'Something else') %>%
   filter((download_apple != 'No, I am NOT') | (download_android != 'No, I am NOT')) %>%
   # filter() %>%
   nrow()
-n_passed_3_att_check <- intake_new %>%
+n_passed_3_att_check <- intake_new %>% filter(Consent != 'No, I do NOT consent') %>% 
+  filter(platforms_jive != 1) %>%
+  filter(platforms_jive != 2) %>%
+  filter(state != 'I do not reside in the United States') %>%
+  filter(age >= 18) %>%
+  filter(device != 'Something else') %>%
+  filter((download_apple != 'No, I am NOT') | (download_android != 'No, I am NOT')) %>%
   filter(!is.na(screen_image)) %>%
   filter(screen_image == 3) %>%
   nrow()
-
 
 intake_drops_nodes <- tribble(
   ~node, ~ stage,
@@ -827,7 +848,7 @@ intake_drops_df <- tribble(
   'Android/iPhone user', 'Won\'t download app', n_android_iphone_user - n_will_download_app,
   'Download app', 'Passed `3` attention check', n_passed_3_att_check,
   'Download app', 'Failed `3` attention check', n_will_download_app - n_passed_3_att_check,
-  'Passed `3` attention check', 'Unforced attrition', total_n - intake_completes - forced_attrit,
+  'Passed `3` attention check', 'Unforced attrition', n_passed_3_att_check - intake_completes,
   'Passed `3` attention check', 'Finished intake', intake_completes
 ) %>%
   left_join(intake_drops_nodes, by = c('start' = 'node')) %>%
@@ -976,7 +997,9 @@ pretreat_demogs %>%
   ) %>%
   mutate(ideo7 = as.factor(ideo7)) %>%
   filter(!is.na(ideo7)) %>%
-  glm(formula = "finished_newsfeed ~ ideo7 * condition", family = 'binomial') %>%
+  filter(ideo7 == 'Extremely conservative') %>%
+  filter(condition != 'pure_control') %>%
+  glm(formula = "finished_newsfeed ~ condition", family = 'binomial') %>%
   summary() %>%
   pander::pander(caption = 'No significant difference between newsfeed dropout based on political party')
 
@@ -1160,7 +1183,7 @@ survey_df$correct_bonus <- survey_df$password %>%
 
 ### Made 1+ post and 1+ comment
 ```{r at least one post and comment, echo=FALSE, message=FALSE, warning=FALSE}
-survey_df <- survey_df %>%
+survey_df_commenting <- survey_df %>%
   right_join(content %>%
   group_by(participantCode) %>%
   summarize(n_posts = sum(this_is_a_post),
@@ -1172,7 +1195,7 @@ survey_df <- survey_df %>%
 
 ```{r venn diagram, message = FALSE, warning = FALSE, echo = FALSE}
 
-ggplot(survey_df) +
+ggplot(survey_df_commenting) +
   geom_venn(aes(A = !speeder, B = pass_zip_check, C = correct_bonus, D = (mc_correct == 1), E = participant_commented, G = participant_posted), show_percentage = FALSE,
             set_names = c('Did not speed', 'Zip code state = Reported state', 'Correct bonus word', 'Correct manip check', 'Commented', 'Posted'),
             fill_color = c('#3b528b', '#21918c', '#5ec962', '#1ff340', '#6b528b', '#9b528b')) +
@@ -1187,7 +1210,7 @@ ggplot(survey_df) +
 ```
 
 ```{r participant check, message = FALSE, warning = FALSE, echo = FALSE}
-survey_df %>%
+survey_df_commenting %>%
   group_by(!speeder, pass_zip_check) %>%
   count() %>%
   rename(`Did not speed` = `!speeder`,
@@ -1195,7 +1218,7 @@ survey_df %>%
   arrange(-n) %>%
   pander::pander()
 
-survey_df %>%
+survey_df_commenting %>%
   group_by(!speeder, pass_zip_check, correct_bonus, (mc_correct == 1), participant_commented, participant_posted) %>%
   count() %>%
   rename(`Did not speed` = `!speeder`,
@@ -1216,6 +1239,12 @@ pretreat_demogs %>%
   mutate_at(.funs = as.factor, .vars = c('ideo7')) %>%
   glm(formula = 'finished_newsfeed ~ ideo7 + pass_zip_check + speeder', family = 'binomial', data = .) %>%
   summary()
+
+
+pretreat_demogs %>%
+  select(pre_ih_binary, extremity_pre, pre_policy_gc_binary, pre_policy_imm_binary, pid3, ideo7, race_new, new_educ, social_media_high, pid7, treatment, finished_newsfeed) %>%
+  glm(formula = finished_newsfeed ~ ., family = 'binomial', data = .) %>%
+  stargazer::stargazer(title = 'Does attrition during the newsfeed differ by treatment?', type = 'text', star.cutoffs = c(0.05, 0.01, 0.001))
 ```
 
 
@@ -1367,7 +1396,7 @@ demogs_plot('new_educ', c('Less than high school',
                           'Associate degree in college',
                           'Bachelor’s degree',
                           'Post-graduate degree'),
-            'Education')
+            'Education'). 
 
 bind_rows(balance_table('race_new', title = 'Race')) %>%
   bind_rows(balance_table('age', title = 'Age')) %>%
@@ -1454,9 +1483,10 @@ survey_df %>%
   group_by(name) %>%
   mutate(n = n()) %>%
   ungroup() %>%
-  ungroup() %>%
+  # ungroup() %>%
   group_by(name, value) %>%
-  summarise(prop = round(n()/n * 100, 2)) %>%
+  summarise(prop = round(n()/n * 100, 2), 
+            n = n()) %>%
   unique() %>%
   # summarize(mode_prop = round(mean(value == Mode) * 100, 2),
   #           Values = n_distinct(value),
@@ -1465,7 +1495,7 @@ survey_df %>%
   # mutate(Mode = paste0(Mode, ' (', mode_prop, '%)')) %>%
   rename(Variable = name) %>%
   # select(-mode_prop) %>%
-  stargazer::stargazer(summary = FALSE, rownames = FALSE)
+  stargazer::stargazer(summary = FALSE, rownames = FALSE, type = 'latex')
 
 ordinal_vars <-
   c(
@@ -1555,8 +1585,9 @@ survey_df %>%
   summarize(Median = median(value, na.rm = TRUE),
             Range = paste0('[', min(value), ',', max(value), ']'),
             `(25th, 75th)` = paste0('[', quantile(value, 0.25), ',', quantile(value, 0.75), ']'),
-            `#Missing` = sum(is.na(value))
+            # `#Missing` = sum(is.na(value))
             ) %>%
+  mutate(name = paste0('quad ', name)) %>%
   stargazer::stargazer(type = 'latex', title = 'Summary statistics for ordinal variables', summary = FALSE, rownames = FALSE)
 ```
 
@@ -1812,6 +1843,7 @@ main_hypothesis_test(survey_df, 'extremity_post_less_pre', display_plot = TRUE, 
 ```
 
 
+
 ## Subgroup Analyses
 ```{r subgroup, echo=TRUE, warning=FALSE}
 
@@ -1856,16 +1888,18 @@ subgroup %>%
 ## Other Questions
 ### How do descriptions of the platform differ between treated and control users?
 ```{r description of platform, echo=TRUE, warning=FALSE}
-main_hypothesis_test(survey_df, 'engaging', display_plot = TRUE, title = 'All participants, platform description')
-main_hypothesis_test(survey_df, 'toxic', display_plot = TRUE, title = 'All participants, platform description')
-main_hypothesis_test(survey_df, 'exhausting', display_plot = TRUE, title = 'All participants, platform description')
+main_hypothesis_test(survey_df, 'engaging', display_plot = TRUE, title = 'All participants, platform description: engaging')
+main_hypothesis_test(survey_df, 'toxic', display_plot = TRUE, title = 'All participants, platform description: toxic')
+main_hypothesis_test(survey_df, 'exhausting', display_plot = TRUE, title = 'All participants, platform description: exhausting')
+main_hypothesis_test(survey_df, 'platforms', display_plot = TRUE, title = 'All participants, platform description: composite')
 ```
 
 ### How do descriptions of other users differ between treated and control users?
 ```{r description of users, echo=TRUE, warning=FALSE}
-main_hypothesis_test(survey_df, 'polite', display_plot = TRUE, title = 'All participants, user description')
-main_hypothesis_test(survey_df, 'aggressive', display_plot = TRUE, title = 'All participants, user description')
-main_hypothesis_test(survey_df, 'tolerant', display_plot = TRUE, title = 'All participants, user description')
+main_hypothesis_test(survey_df, 'polite', display_plot = TRUE, title = 'All participants, user description: polite')
+main_hypothesis_test(survey_df, 'aggressive', display_plot = TRUE, title = 'All participants, user description: aggressive')
+main_hypothesis_test(survey_df, 'tolerant', display_plot = TRUE, title = 'All participants, user description: tolerant')
+main_hypothesis_test(survey_df, 'users', display_plot = TRUE, title = 'All participants, user description: composite')
 ```
 
 ### How does treatment affect comfort in sharing ideas?
@@ -1977,6 +2011,15 @@ survey_df %>%
                        rownames = FALSE, 
                        summary = FALSE)
 
+survey_df %>%
+  mutate(future_use_likely = (future_use_n >= 3)) %>%
+  glm(future_use_likely ~ condition, data = ., family='binomial') %>%
+  stargazer::stargazer(type ='text', star.cutoffs = c(0.05, 0.01, 0.001))
+
+survey_df %>%
+  mutate(future_use_likely = (future_use_n >= 3)) %>%
+  glm(future_use_likely ~ condition, data = ., family='gaussian') %>%
+  stargazer::stargazer(type ='text', star.cutoffs = c(0.05, 0.01, 0.001))
 ```
 
 ### How does treatment affect number of likes and dislikes?
@@ -1999,8 +2042,10 @@ survey_df %>%
   # pivot_wider(id_cols = condition, values_from = prop, names_from = future_use) %>%
     stargazer::stargazer(title = 'The table compares the average number of likes and dislikes of others\' posts in the newsfeed by condition.', 
                          label = 'tbl:likes_dislikes',
+                         type = 'latex',
                        rownames = FALSE, 
                        summary = FALSE)
+
 ```
 
 ### How does post length differ between conditions?
@@ -2018,7 +2063,9 @@ content %>%
   stargazer::stargazer(title = 'The table compares the average length of posts/comments generated by users on the newfeed between conditions. Values inside parentheses represent 95% confidence intervals.', 
                          label = 'tbl:post_length',
                        rownames = FALSE, 
-                       summary = FALSE)
+                       summary = FALSE,
+                       star.cutoffs = c(0.05, 0.01, 0.001))
+
 ```
 
 ### Affective polarization: how does treatment affect in party vs out party individually?
@@ -2035,7 +2082,7 @@ for(i in 1:length(outcome_cols)) {
                       mutate(Treat = as.integer(condition == 'treat')))
   hte_lm_list[[i]] <- hte_lm_pid7
 }
-stargazer_output_pid7 <- capture.output(stargazer::stargazer(hte_lm_list, type = 'latex', title = 'HTE by 7 point Party ID'))
+stargazer_output_pid7 <- capture.output(stargazer::stargazer(hte_lm_list, type = 'latex', title = 'HTE by 7 point Party ID', star.cutoffs = c(0.05, 0.01, 0.001)))
 stargazer_output_pid7 <- gsub(':', '*', stargazer_output_pid7)
 stargazer_output_pid7 <- gsub('pid7', '', stargazer_output_pid7)
 stargazer_output_pid7 <- sapply(stargazer_output_pid7, FUN = function(x) paste0(x, '\n'))
@@ -2046,7 +2093,7 @@ for(i in 1:length(outcome_cols)) {
   hte_lm_ih_list[[i]] <- lm(paste0(outcome_cols[i], ' ~ Treat + `High IH` + Treat * `High IH`'), survey_df %>% mutate(Treat = as.integer(condition == 'treat'), `High IH` = pre_ih_binary))
 }
 
-stargazer_output_ih <- capture.output(stargazer::stargazer(hte_lm_ih_list, type = 'latex', title = 'HTE by Pre-treatment IH'))
+stargazer_output_ih <- capture.output(stargazer::stargazer(hte_lm_ih_list, type = 'latex', title = 'HTE by Pre-treatment IH', star.cutoffs = c(0.05, 0.01, 0.001)))
 stargazer_output_ih <- gsub(':', '*', stargazer_output_ih)
 stargazer_output_ih <- gsub('`', '', stargazer_output_ih)
 stargazer_output_ih <- sapply(stargazer_output_ih, FUN = function(x) paste0(x, '\n'))
