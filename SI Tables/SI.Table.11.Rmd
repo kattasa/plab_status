@@ -1,0 +1,208 @@
+---
+title: "SI.Table.11"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "intake" which contains cleaned participant intake survey data.
+intake <- read_csv('../Data/intake_cleaned.csv') # Read csv data file.
+
+# Create dataframe "pretreat" which contains cleaned participant pre-treatment survey data.
+pretreat <- read_csv('../Data/pretreat_cleaned.csv') # Read csv data file.
+
+# Create dataframe "posttreat" which contains cleaned participant post-treatment survey data.
+posttreat <- read_csv('../Data/posttreat_cleaned.csv') # Read csv data file.
+```
+
+# DATA FORMATTING.
+```{r DATA FORMATTING}
+# In dataframe "intake", create column "finished_intake" which classifies participants as finishing (TRUE) or not finishing (FALSE) the intake survey.
+intake$finished_intake <- !is.na(intake$participant_code) # If a participant has an NA value for their participant code, that means they did not finish the intake survey. Assign a FALSE value. If a participant doesn't have an NA value for their participant code (!is.na), that means they did finish the intake survey. Assign a TRUE value.
+
+# Create dataframe "intake_complete" which contains only participants who finished the intake survey. Also create column "started_pretreat" which classifies participants as starting (TRUE) or not starting (FALSE) the pretreat survey.
+intake_complete <- intake %>% 
+  filter(!is.na(participant_code)) %>% # If participant code = NA, that means the participant did not complete the intake. Filter out participants who did not complete the intake.
+  mutate(started_pretreat = participant_code %in% pretreat$participant_code) # If a participant code in intake_complete is contained in pretreat, then assign a TRUE value. Otherwise, assign a FALSE value.
+
+# In dataframe "pretreat", create column "finished_newsfeed" which classifies participants as finishing (TRUE) or not finishing (FALSE) the newsfeed experiment.
+pretreat$finished_newsfeed <- (pretreat$participant_code %in% posttreat$participant_code) # If a participant completed the newsfeed experiment, then their participant code will appear in both the pretreat and posttreat dataframes. Assign a TRUE value if the participant code is in both dataframes. Otherwise assign a FALSE value.
+
+# Create a list of demographics columns contained in the intake dataframe.
+demographics <- c('pid3', 'ideo7', 'race_new', 'device', 'educ_new', 'social_media_high', 'platforms_fb', 'platforms_insta', 'platforms_tiktok', 'platforms_x', 'platforms_truth')
+
+# Join the demographics columns from the intake survey to the pretreat dataframe.
+pretreat <- pretreat %>%
+  left_join(intake %>% dplyr::select(c(demographics, 'participant_code')), by = 'participant_code') # Join the demographics columns from the intake dataframe to pretreat, matching values by participant codes.
+```
+
+# CREATE FUNCTION IN ORDER TO RUN LOGISTIC REGRESSIONS.
+```{r CREATE FUNCTION IN ORDER TO RUN LOGISTIC REGRESSIONS}
+# Over 30 logistic regressions will be run in order to create this table. To make this process easier, create function "predict_missing" which contains code needed to run a logistic regression.
+predict_missing <- function(dataframe, outcome, covariate) { # Input dataframe name (e.g. intake), outcome variable (e.g. finished_intake), and covariate variable (e.g. pid3).
+  
+  # Create temporary dataframe "df" which includes the outcome and covariate variables. Drop any NAs contained in the covariate variable.
+  df <- dataframe %>% 
+    dplyr::select(!!as.symbol(outcome), !!as.symbol(covariate)) %>% # Select the columns for the outcome and covariate variables using !!as.symbol to pull the column names.
+    drop_na() # Drop NA values from the covariate variable.
+  
+  # If the covariate has more than two factor levels, then the first factor level is defined as the reference level.
+  if((df[[covariate]] %>% unique() %>% length()) > 2){ # If the amount of unique factor levels in a covariate is greater than two, then:
+    df <- df %>% mutate_at(.funs = as.factor, .vars = c(covariate)) # Apply the as.factor function to the covariate column in order to turn the covariate into a factor.
+    ref <- levels(df[[covariate]])[1] # Define the first factor level of the covariate as the reference level "ref".
+  } else { # If the covariate has 2 factor levels or less, then:
+    ref <- NA} # Set the reference level "ref" as NA.
+  
+  # Run a logistic regression, saving the result as "logistic_regression_result".
+  logistic_regression_result <- glm(formula = paste0(outcome, '~', covariate), # Paste the outcome and covariate into the regression formula.
+                                    family = 'binomial', # Specify the model type as binomial.
+                                    data = df) # Specify the dataframe as df.
+  
+  # Save the logistic regression summary as "logistic_regression_summary".
+  logistic_regression_summary <- summary(logistic_regression_result)
+  
+  # Extract the regression coefficients from logistic_regression_summary and save as "logistic_regression_coefficients".
+  logistic_regression_coefficients <- as.data.frame(logistic_regression_summary$coefficients)
+  
+  # Create column "outcome" which contains the name of the outcome variable.
+  logistic_regression_coefficients <- logistic_regression_coefficients %>%
+    mutate(outcome = outcome)
+  
+  # Create column "reference" which contains the name of the reference level (if applicable).
+  logistic_regression_coefficients <- logistic_regression_coefficients %>%
+    mutate(reference = ref)
+  
+  # Transfer the row names into a column.
+    logistic_regression_coefficients <- logistic_regression_coefficients %>%
+      rownames_to_column()
+    
+  # Finally, this function should return the logistic_regression_coefficients dataframe.
+  return(logistic_regression_coefficients)}
+```
+
+# RUN LOGISTIC REGRESSIONS.
+```{r RUN LOGISTIC REGRESSIONS}
+# Run a logistic regression for all valid combinations of dataframe, outcome, and covariate. Bind resulting logistic regression coefficients together (bind_rows) and save as "logistic_regression_outputs". As a reminder: 
+  # Dataframe = intake, intake_complete, pretreat.
+  # Outcome = finished_intake, started_pretreat, finished_newsfeed.
+  # Covariate = pid3, ideo7, race_new, device, educ_new, social_media_high, platforms_fb, platforms_insta, platforms_tiktok, platforms_x, platforms_truth.
+
+logistic_regression_outputs <- predict_missing(intake, 'finished_intake', 'pid3') %>%
+  bind_rows(predict_missing(intake, 'finished_intake', 'ideo7')) %>%
+  bind_rows(predict_missing(intake, 'finished_intake', 'race_new')) %>%
+  bind_rows(predict_missing(intake, 'finished_intake', 'device')) %>%
+  bind_rows(predict_missing(intake, 'finished_intake', 'educ_new')) %>%
+  bind_rows(predict_missing(intake, 'finished_intake', 'social_media_high')) %>%
+  bind_rows(predict_missing(intake, 'finished_intake', 'platforms_fb')) %>%
+  bind_rows(predict_missing(intake, 'finished_intake', 'platforms_insta')) %>%
+  bind_rows(predict_missing(intake, 'finished_intake', 'platforms_tiktok')) %>%
+  bind_rows(predict_missing(intake, 'finished_intake', 'platforms_x')) %>%
+  bind_rows(predict_missing(intake, 'finished_intake', 'platforms_truth')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'pid3')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'ideo7')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'race_new')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'device')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'educ_new')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'social_media_high')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'platforms_fb')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'platforms_insta')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'platforms_tiktok')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'platforms_x')) %>%
+  bind_rows(predict_missing(intake_complete, 'started_pretreat', 'platforms_truth')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'pid3')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'ideo7')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'race_new')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'device')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'educ_new')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'social_media_high')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'platforms_fb')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'platforms_insta')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'platforms_tiktok')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'platforms_x')) %>%
+  bind_rows(predict_missing(pretreat, 'finished_newsfeed', 'platforms_truth'))
+```
+
+# FORMAT TABLE.
+```{r FORMAT TABLE}
+# Round the estimate column to two decimal places.
+logistic_regression_outputs <- logistic_regression_outputs %>% 
+  mutate(Estimate = round(Estimate, 2))
+
+# Create column "stars" which assigns significance stars based on p-value.
+logistic_regression_outputs <- logistic_regression_outputs %>% 
+  mutate(stars = case_when(`Pr(>|z|)` <= 0.001 ~ '***', # If the p-value is equal to or below 0.001, then assign three stars.
+                         `Pr(>|z|)` <= 0.01 ~ '**', # If the p-value is equal to or below 0.01, then assign two stars.
+                         `Pr(>|z|)` <= 0.05 ~ '*', # If the p-value is equal to or below 0.05, then assign one star. 
+                         .default = ' ')) # Otherwise, default to no stars.
+
+# Remove any values that correspond to intercepts.
+logistic_regression_outputs <- logistic_regression_outputs %>% 
+  filter(rowname != '(Intercept)') # If rowname contains "Intercept", then filter out the row.
+
+# Combine the estimates with corresponding significance stars.
+logistic_regression_outputs <- logistic_regression_outputs %>% 
+  mutate(Estimate = paste0(Estimate, stars)) # Paste together the estimates and stars.
+
+# Reformat the table.
+logistic_regression_outputs <- logistic_regression_outputs %>% 
+pivot_wider(id_cols = c(rowname, reference), names_from = outcome, values_from = Estimate) # Identify values using the columns "rowname" and "reference". The columns should be each outcome, and the values within the columns are the estimates.
+
+# Remove rows that do not contain a significant estimate.
+logistic_regression_outputs <- logistic_regression_outputs %>% 
+  filter(str_ends(finished_intake, ' ') + str_ends(started_pretreat, ' ') + str_ends(finished_newsfeed, ' ') < 3) # Use str_ends() to identify if there are no significance stars (' ') in each column (finished_intake, started_pretreat, finished_newsfeed). If there are less than three blank spaces, that means at least one value is significant in the row. Filter for rows that have at least one significant value.
+
+# Reformat the "rowname" column so that values are more readable.
+# Note: the format for the following lines of code are: in column rowname, replace the current value (e.g. pid3Independent) with a new value (e.g. Independent).
+logistic_regression_outputs <- logistic_regression_outputs %>% 
+  mutate(rowname = case_when(
+    rowname == "pid3Independent" ~ "Independent", 
+    rowname == "ideo7Extremely conservative" ~ "Extremely conservative", 
+    rowname == "ideo7Somewhat conservative" ~ "Somewhat conservative", 
+    rowname == "race_newBlack or African American" ~ "Black or African American", 
+    rowname == "race_newHispanic" ~ "Hispanic",
+    rowname == "race_newWhite" ~ "White",
+    rowname == "educ_newPost-graduate degree" ~ "Holds a post-graduate degree",
+    rowname == "social_media_highTRUE" ~ "High social media use", 
+    rowname == "platforms_fb2" ~ "Uses Facebook a lot", 
+    rowname == "platforms_insta1" ~ "Uses Instagram some",
+    rowname == "platforms_insta2" ~ "Uses Instagram a lot",
+    rowname == "platforms_tiktok1" ~ "Uses TikTok some", 
+    rowname == "platforms_tiktok2" ~ "Uses TikTok a lot", 
+    rowname == "platforms_x2" ~ "Uses X a lot", 
+    rowname == "platforms_truth1" ~ "Uses Truth some", 
+    rowname == "platforms_truth2" ~ "Uses Truth a lot")) 
+
+# Rename columns.
+logistic_regression_outputs <- logistic_regression_outputs %>% 
+  rename(
+    Covariate = rowname, # Rename rowname as "Covariate".
+    `Reference Level` = reference, # Rename reference as "Reference Level".
+    `Finished intake survey` = finished_intake, # Rename finished_intake as "Finished intake survey".
+    `Started pretreatment survey` = started_pretreat, # Rename started_pretreat as "Started pretreatment survey".
+    `Finished newsfeed experience` = finished_newsfeed) # Rename finished_newsfeed as "Finished newsfeed experience".
+
+# Replace the NA value in column "Reference Level" with a blank space.
+logistic_regression_outputs$`Reference Level`[logistic_regression_outputs$Covariate == "High social media use"] = ''
+
+# Save dataframe as "table11".
+table11 <- logistic_regression_outputs
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table11)
+stargazer::stargazer(table11, rownames = FALSE, summary = FALSE)
+```
+

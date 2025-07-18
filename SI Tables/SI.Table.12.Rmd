@@ -1,0 +1,102 @@
+---
+title: "SI.Table.12"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES. 
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+
+# Create dataframe "coded_data" which contains codes of participants' open-ended descriptions of how one might earn user badges on the platform they experienced.
+coded_data <- read_csv('../Data/open_ended_data_coded.csv') # Read csv data file.
+```
+
+# FORMAT DATA.
+```{r FORMAT DATA}
+# The dataframe "data" contains the experimental condition that each participant was assigned to (treatment, control). Classify participants in the "coded_data" dataframe based on the experimental condition they were assigned to in data. 
+coded_data <- coded_data %>%
+  left_join(data %>% # Join data to coded_data.
+              dplyr::select(participant_code, condition), # Select the participant_code and condition columns from data.
+              by = c('participant_code' = 'participant_code')) # Match the observations in coded_data and data by participant codes.
+
+# Remove participants who were in the pure control condition.
+coded_data <- coded_data %>% 
+  filter(!is.na(condition)) # If a participant has an NA value in the condition column, then they were in the pure control condition. Filter out pure control participants (!is.na).
+
+# Remove three columns: "participant_code", "open_badge" and "other". These columns are not used in the analysis. 
+coded_data <- coded_data %>% 
+  dplyr::select(-participant_code, -open_badge, - other) # Remove (-) columns "participant_code", "open_badge" and "other".
+
+# Replace all NA values with 0.
+coded_data <- coded_data %>% 
+  mutate(across(everything(), ~replace_na(.x, 0))) # Across all columns (across(everything())), replace any NA values with 0.
+```
+
+# RUN ANALYSIS.
+```{r RUN ANALYSIS}
+# Calculate the frequency of codes in participants' open-ended descriptions for both treatment and control conditions. Save results in dataframe "proportions".
+proportions <- coded_data %>%
+  group_by(condition) %>% # Group analysis by experimental condition (treatment and control).
+  summarise(across(open_minded:hard_to_code, ~ mean(.x, na.rm = TRUE))) %>% # Calculate the mean of each code column (from open-minded to hard_to_code). The mean acts as a measure of frequency: adding up the number of occurrences (=1), and dividing by the total number of observations.
+  pivot_longer(-condition, names_to = "variable", values_to = "proportion") # Format the dataframe, so that the experimental condition is in column "condition", the code name is in column "variable", and the corresponding frequencies are in column "proportion".
+
+# Conduct a chi-square test of the code observations for treatment and control conditions. Save results in dataframe "pvalues".
+pvalues <- coded_data %>%
+  pivot_longer(-condition, names_to = "variable", values_to = "code_observation") %>% # Format the data, so that the experimental condition is in column "condition", the code is in column "variable", and the corresponding code occurrences (1 = observed, or 0 = not observed) are in column "code_observation".
+  group_by(variable) %>% # Calculate chi-square tests for each code.
+  summarise(p_value = chisq.test(table(condition, code_observation))$p.value) # Run chi-square tests on a contingency table of experimental condition and code observation (table(condition, code_observation)) for each code variable, saving the p-value ($p.value) in column "p_value".
+```
+
+# FORMAT TABLE.
+```{r FORMAT TABLE}
+# Reformat the proportions dataframe.
+proportions <- proportions %>% 
+  pivot_wider(names_from = condition, values_from = proportion) # Rearrange the proportions dataframe, so that there are two columns (one for each condition), containing the frequency proportions for each code variable.
+
+# Combine the proportions dataframe and the pvalues dataframe. Save as "table12". 
+table12 <- proportions %>% 
+  left_join(pvalues, by = c("variable" = "variable")) # Add the pvalues dataframe to the proportions dataframe, matching values by code variable.
+  
+# Round the frequency proportions to two decimal places.
+table12 <- table12 %>% 
+  mutate(control = round(control, 2)) %>% # Round values in the control column to two decimal places.
+  mutate(treat = round(treat, 2)) # Round values in the treat column to two decimal places.
+
+# Reformat the "p_value" column.
+table12 <- table12 %>% 
+  mutate(p_value = ifelse(p_value < 0.01, gsub("e", " x 10^", sprintf("%.2e", p_value)), round(as.numeric(p_value), 2))) # If the p-value is < 0.01, then convert to scientific notation, in which the leading value is rounded to two decimal places (sprintf(%.2e)) and e is replaced with "x 10^". However, if the p-value is > 0.01, then round to two decimal places.
+
+# Convert the "variable" column to row names.
+table12 <- column_to_rownames(table12, var = "variable")
+
+# Reorder the rows.
+table12 <- table12[c("open_minded", "civil", "moderate", "dont_know", "non-sequitur", "no_answer", "uncivil", "hard_to_code", "activity", "popular", "extreme_controversial"), ] # Reorder the rows based on the specified order "open_minded", "civil", "moderate"...
+
+# Rename the rows.
+rownames(table12) <- c("Open-minded", "Civil", "Moderate", "Don't Know", "Non-sequitur", "No Answer", "Uncivil", "Hard to Code", "Activity", "Popular", "Extreme/Controversial")
+
+# Convert the row names to a column.
+table12 <- rownames_to_column(table12, var = "code_name")
+
+# Rename the columns.
+colnames(table12) <- c("Code", "Control Proportion", "Treatment Proportion", "P")
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table12)
+stargazer::stargazer(table12, rownames = FALSE, summary = FALSE)
+```

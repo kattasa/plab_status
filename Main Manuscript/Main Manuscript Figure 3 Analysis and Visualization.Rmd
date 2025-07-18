@@ -1,0 +1,866 @@
+---
+title: "Main Manuscript Figure 3 Analysis and Visualization"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(stringr)
+library(extrafont)
+loadfonts(device = "win")
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# STANDARDIZE VARIABLES.
+```{r STANDARDIZE VARIABLES}
+# Standardize ih_a_all.
+data <- data %>% 
+  mutate(ih_a_all = scale(ih_a_all))
+
+# Standardize delta_ih.
+data <- data %>% 
+  mutate(delta_ih = scale(delta_ih))
+
+# Standardize ih_engagement.
+data <- data %>% 
+  mutate(ih_engagement = scale(ih_engagement))
+
+# Standardize panas_pos.
+data <- data %>% 
+  mutate(panas_pos = scale(panas_pos))
+
+# Standardize panas_neg.
+data <- data %>% 
+  mutate(panas_neg = scale(panas_neg))
+
+# Standardize panas.
+data <- data %>% 
+  mutate(panas = scale(panas))
+
+# Standardize affective_polarization.
+data <- data %>% 
+  mutate(affective_polarization = scale(affective_polarization))
+
+# Standardize extremity_post_less_pre.
+data <- data %>% 
+  mutate(extremity_post_less_pre = scale(extremity_post_less_pre))
+```
+
+
+# N-VALUES FOR EACH OUTCOME.
+```{r N-VALUES FOR EACH OUTCOME}
+# Void out the one participant who didn't fully answer intellectual humility measures.
+data$delta_ih[data$participant_code == "9paveb"] <- NA
+
+# Create a list of the main outcomes of interest.
+outcomes <- c("ih_a_all", # Language in posts and comments indicative of humility.
+              "delta_ih", # Change in self-reported humility.
+              "ih_engagement", # Liked and disliked humble content.
+              "panas_pos", # Positive emotional index.
+              "panas_neg", # Negative emotional index.
+              "panas", # Composite emotional index.
+              "affective_polarization", # Change in affective polarization.
+              "extremity_post_less_pre") # Moderation of focal policy position.
+            
+# Standardize the outcome measures. Subtract the mean of the outcome from each observation within the column, and divide by the standard deviation of the column.
+for (y in outcomes){ # Run the following line of code for each column listed in the "outcomes" list.
+  data[[y]] <- (data[[y]] - mean(data[[y]], na.rm=TRUE)) / sd(data[[y]], na.rm = TRUE)} # Subtract the mean of the outcome from each observation within the column, and divide by the standard deviation of the column.
+
+# Find the n-value (number of observations) for each column.
+for(y in outcomes){ # Run the following two lines of code for each column listed in the "outcomes" list.
+  length <- length(data[[y]]) - sum(is.na(data[[y]])) # Create variable "length" which contains the number of observations (length(data[[y]])) within the column subtracted by the number of NA values within the column (sum(is.na(data[[y]]))).
+  print(paste(y, length))} # Paste together and print the name of the column and the number of observations within the column.
+```
+
+# INTELLECTUAL HUMILITY BOOTSTRAP ANALYSIS: LANGUAGE IN POSTS AND COMMENTS INDICATIVE OF HUMILITY.
+```{r INTELLECTUAL HUMILITY BOOTSTRAP ANALYSIS: LANGUAGE IN POSTS AND COMMENTS INDICATIVE OF HUMILITY}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 25000
+
+# Create a new dataframe "data_ih_language" where NAs are excluded.
+data_ih_language <- subset(data, !is.na(ih_a_all))
+
+# Calculate the mean "ih_a_all" score for participants in the treatment condition.
+mean_treatment <- mean(data_ih_language %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("ih_a_all")) # Select the "ih_a_all" column to take the mean of.
+                          
+# Calculate the mean "ih_a_all" score for participants in the control condition.
+mean_control <- mean(data_ih_language %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("ih_a_all")) # Select the "ih_a_all" column to take the mean of.
+  
+# Calculate the difference "ih_langauge_beta" between the treatment and control means.
+ih_langauge_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 10,000 times (n_boots = 10000).
+    boot <- data_ih_language %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("ih_a_all")) - mean(boot %>% filter(condition == "control") %>% pull("ih_a_all"))}) # Calculate difference between mean treatment "ih_a_all" and mean control "ih_a_all".
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Calculate a 90% confidence interval for the bootstraps.
+ci_90 <- quantile(boots, probs = c(0.05, 0.95)) # Save the 5th (lower bound) and 95th (upper bound) percentile of the bootstraps.
+
+# Save the 90% and 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 3.
+ih_langauge_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+ih_langauge_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+ih_langauge_ci_90_lo <- c(round(ci_90[1], 4)) # Round to 4 digits.
+ih_langauge_ci_90_hi <- c(round(ci_90[2], 4)) # Round to 4 digits.
+
+# Run a t-test on ih_a_all score between treatment and control groups.
+t_test <- t.test(data_ih_language %>% filter(condition == "treat") %>% pull("ih_a_all"), # Compare treatment and condition groups, with "ih_a_all" as the dependent variable.
+                 data_ih_language %>% filter(condition == "control") %>% pull("ih_a_all"), 
+                 var.equal = TRUE, na.action = na.omit)
+
+# Save the p-value of the t-test, which will be used when creating Figure 3.
+ih_langauge_p_value <- t_test$p.value
+  
+# Print results.
+print(c("ih_langauge_beta", ih_langauge_beta))
+print(c("ih_langauge_ci_95_lo",ih_langauge_ci_95_lo[[1]]))
+print(c("ih_langauge_ci_95_hi", ih_langauge_ci_95_hi[[1]]))
+print(c("ih_langauge_ci_90_lo", ih_langauge_ci_90_lo[[1]]))
+print(c("ih_langauge_ci_90_hi", ih_langauge_ci_90_hi[[1]]))
+print(c("ih_langauge_p_value", ih_langauge_p_value))
+
+# Remove unnecessary dataframes/vectors.
+rm(n_boots, data_ih_language, mean_treatment, mean_control, boots, ci_95, ci_90, t_test)
+```
+
+# INTELLECTUAL HUMILITY BOOTSTRAP ANALYSIS: CHANGE IN SELF-REPORTED HUMILITY.
+```{r INTELLECTUAL HUMILITY BOOTSTRAP ANALYSIS: CHANGE IN SELF-REPORTED HUMILITY}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 25000
+
+# Create dataframe "data_delta_ih" which does not contain the participant who didn't answer the intellectual humility measures.
+data_delta_ih <- data[data$participant_code != "9paveb", ]
+
+# Calculate the mean "delta_ih" score for participants in the treatment condition.
+mean_treatment <- mean(data_delta_ih %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("delta_ih")) # Select the "delta_ih" column to take the mean of.
+                          
+# Calculate the mean "delta_ih" score for participants in the control condition.
+mean_control <- mean(data_delta_ih %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("delta_ih")) # Select the "delta_ih" column to take the mean of.
+  
+# Calculate the difference "delta_ih_beta" between the treatment and control means.
+delta_ih_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 10,000 times (n_boots = 10000).
+    boot <- data_delta_ih %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("delta_ih")) - mean(boot %>% filter(condition == "control") %>% pull("delta_ih"))}) # Calculate difference between mean treatment "delta_ih" and mean control "delta_ih".
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Calculate a 90% confidence interval for the bootstraps.
+ci_90 <- quantile(boots, probs = c(0.05, 0.95)) # Save the 5th (lower bound) and 95th (upper bound) percentile of the bootstraps.
+
+# Save the 90% and 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 3.
+delta_ih_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+delta_ih_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+delta_ih_ci_90_lo <- c(round(ci_90[1], 4)) # Round to 4 digits.
+delta_ih_ci_90_hi <- c(round(ci_90[2], 4)) # Round to 4 digits.
+
+# Run a t-test on delta_ih score between treatment and control groups.
+t_test <- t.test(data_delta_ih %>% filter(condition == "treat") %>% pull("delta_ih"), # Compare treatment and condition groups, with "delta_ih" as the dependent variable.
+                 data_delta_ih %>% filter(condition == "control") %>% pull("delta_ih"),
+                 var.equal = TRUE, na.action = na.omit)
+
+# Save the p-value of the t-test, which will be used when creating Figure 3.
+delta_ih_p_value <- t_test$p.value
+  
+# Print results.
+print(c("delta_ih_beta", delta_ih_beta))
+print(c("delta_ih_ci_95_lo", delta_ih_ci_95_lo[[1]]))
+print(c("delta_ih_ci_95_hi", delta_ih_ci_95_hi[[1]]))
+print(c("delta_ih_ci_90_lo", delta_ih_ci_90_lo[[1]]))
+print(c("delta_ih_ci_90_hi", delta_ih_ci_90_hi[[1]]))
+print(c("delta_ih_p_value", delta_ih_p_value))
+
+# Remove unnecessary dataframes/vectors.
+rm(n_boots, data_delta_ih, mean_treatment, mean_control, boots, ci_95, ci_90, t_test)
+
+```
+
+# INTELLECTUAL HUMILITY BOOTSTRAP ANALYSIS: LIKED AND DISLIKED HUMBLE CONTENT.
+```{r INTELLECTUAL HUMILITY BOOTSTRAP ANALYSIS: LIKED AND DISLIKED HUMBLE CONTENT}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 25000
+
+# Calculate the mean "ih_engagement" score for participants in the treatment condition.
+mean_treatment <- mean(data %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("ih_engagement")) # Select the "ih_engagement" column to take the mean of.
+                          
+# Calculate the mean "ih_engagement" score for participants in the control condition.
+mean_control <- mean(data %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("ih_engagement")) # Select the "ih_engagement" column to take the mean of.
+  
+# Calculate the difference "ih_engagement_beta" between the treatment and control means.
+ih_engagement_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 10,000 times (n_boots = 10000).
+    boot <- data %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("ih_engagement")) - mean(boot %>% filter(condition == "control") %>% pull("ih_engagement"))}) # Calculate difference between mean treatment "ih_engagement" and mean control "ih_engagement".
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Calculate a 90% confidence interval for the bootstraps.
+ci_90 <- quantile(boots, probs = c(0.05, 0.95)) # Save the 5th (lower bound) and 95th (upper bound) percentile of the bootstraps.
+
+# Save the 90% and 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 3.
+ih_engagement_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+ih_engagement_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+ih_engagement_ci_90_lo <- c(round(ci_90[1], 4)) # Round to 4 digits.
+ih_engagement_ci_90_hi <- c(round(ci_90[2], 4)) # Round to 4 digits.
+
+# Run a t-test on ih_engagement score between treatment and control groups.
+t_test <- t.test(data %>% filter(condition == "treat") %>% pull("ih_engagement"), # Compare treatment and condition groups, with "ih_engagement" as the dependent variable.
+                 data %>% filter(condition == "control") %>% pull("ih_engagement"),
+                 var.equal = TRUE, na.action = na.omit)
+
+# Save the p-value of the t-test, which will be used when creating Figure 3.
+ih_engagement_p_value <- t_test$p.value
+
+# Print results.
+print(c("ih_engagement_beta", ih_engagement_beta))
+print(c("ih_engagement_ci_95_lo", ih_engagement_ci_95_lo[[1]]))
+print(c("ih_engagement_ci_95_hi", ih_engagement_ci_95_hi[[1]]))
+print(c("ih_engagement_ci_90_lo", ih_engagement_ci_90_lo[[1]]))
+print(c("ih_engagement_ci_90_hi", ih_engagement_ci_90_hi[[1]]))
+print(c("ih_engagement_p_value", ih_engagement_p_value))
+
+# Remove unnecessary dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95, ci_90, t_test)
+
+```
+
+# EMOTIONAL EXPERIENCE BOOTSTRAP ANALYSIS: POSITIVE EMOTIONAL INDEX.
+```{r EMOTIONAL EXPERIENCE BOOTSTRAP ANALYSIS: POSITIVE EMOTIONAL INDEX}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 25000
+
+# Calculate the mean "panas_pos" score for participants in the treatment condition.
+mean_treatment <- mean(data %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("panas_pos")) # Select the "panas_pos" column to take the mean of.
+                          
+# Calculate the mean "panas_pos" score for participants in the control condition.
+mean_control <- mean(data %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("panas_pos")) # Select the "panas_pos" column to take the mean of.
+  
+# Calculate the difference "panas_pos_beta" between the treatment and control means.
+panas_pos_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 10,000 times (n_boots = 10000).
+    boot <- data %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas_pos")) - mean(boot %>% filter(condition == "control") %>% pull("panas_pos"))}) # Calculate difference between mean treatment "panas_pos" and mean control "panas_pos".
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Calculate a 90% confidence interval for the bootstraps.
+ci_90 <- quantile(boots, probs = c(0.05, 0.95)) # Save the 5th (lower bound) and 95th (upper bound) percentile of the bootstraps.
+
+# Save the 90% and 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 3.
+panas_pos_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+panas_pos_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+panas_pos_ci_90_lo <- c(round(ci_90[1], 4)) # Round to 4 digits.
+panas_pos_ci_90_hi <- c(round(ci_90[2], 4)) # Round to 4 digits.
+
+# Run a t-test on panas_pos score between treatment and control groups.
+t_test <- t.test(data %>% filter(condition == "treat") %>% pull("panas_pos"), # Compare treatment and condition groups, with "panas_pos" as the dependent variable.
+                 data %>% filter(condition == "control") %>% pull("panas_pos"),
+                 var.equal = TRUE, na.action = na.omit)
+
+# Save the p-value of the t-test, which will be used when creating Figure 3.
+panas_pos_p_value <- t_test$p.value
+  
+# Print results.
+print(c("panas_pos_beta", panas_pos_beta))
+print(c("panas_pos_ci_95_lo", panas_pos_ci_95_lo[[1]]))
+print(c("panas_pos_ci_95_hi", panas_pos_ci_95_hi[[1]]))
+print(c("panas_pos_ci_90_lo", panas_pos_ci_90_lo[[1]]))
+print(c("panas_pos_ci_90_hi", panas_pos_ci_90_hi[[1]]))
+print(c("panas_pos_p_value", panas_pos_p_value))
+
+# Remove unnecessary dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95, ci_90, t_test)
+```
+
+# EMOTIONAL EXPERIENCE BOOTSTRAP ANALYSIS: NEGATIVE EMOTIONAL INDEX.
+```{r EMOTIONAL EXPERIENCE BOOTSTRAP ANALYSIS: NEGATIVE EMOTIONAL INDEX}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 25000
+
+# Calculate the mean "panas_neg" score for participants in the treatment condition.
+mean_treatment <- mean(data %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("panas_neg")) # Select the "panas_neg" column to take the mean of.
+                          
+# Calculate the mean "panas_neg" score for participants in the control condition.
+mean_control <- mean(data %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("panas_neg")) # Select the "panas_neg" column to take the mean of.
+  
+# Calculate the difference "panas_neg_beta" between the treatment and control means.
+panas_neg_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 10,000 times (n_boots = 10000).
+    boot <- data %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas_neg")) - mean(boot %>% filter(condition == "control") %>% pull("panas_neg"))}) # Calculate difference between mean treatment "panas_neg" and mean control "panas_neg".
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Calculate a 90% confidence interval for the bootstraps.
+ci_90 <- quantile(boots, probs = c(0.05, 0.95)) # Save the 5th (lower bound) and 95th (upper bound) percentile of the bootstraps.
+
+# Save the 90% and 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 3.
+panas_neg_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+panas_neg_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+panas_neg_ci_90_lo <- c(round(ci_90[1], 4)) # Round to 4 digits.
+panas_neg_ci_90_hi <- c(round(ci_90[2], 4)) # Round to 4 digits.
+
+# Run a t-test on panas_neg score between treatment and control groups.
+t_test <- t.test(data %>% filter(condition == "treat") %>% pull("panas_neg"), # Compare treatment and condition groups, with "panas_neg" as the dependent variable.
+                 data %>% filter(condition == "control") %>% pull("panas_neg"),
+                 var.equal = TRUE, na.action = na.omit)
+
+# Save the p-value of the t-test, which will be used when creating Figure 3.
+panas_neg_p_value <- t_test$p.value
+
+# Print results.
+print(c("panas_neg_beta", panas_neg_beta))
+print(c("panas_neg_ci_95_lo", panas_neg_ci_95_lo[[1]]))
+print(c("panas_neg_ci_95_hi", panas_neg_ci_95_hi[[1]]))
+print(c("panas_neg_ci_90_lo", panas_neg_ci_90_lo[[1]]))
+print(c("panas_neg_ci_90_hi", panas_neg_ci_90_hi[[1]]))
+print(c("panas_neg_p_value", panas_neg_p_value))
+
+# Remove unnecessary dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95, ci_90, t_test)
+```
+
+# EMOTIONAL EXPERIENCE BOOTSTRAP ANALYSIS: COMPOSITE EMOTIONAL INDEX.
+```{r EMOTIONAL EXPERIENCE BOOTSTRAP ANALYSIS: COMPOSITE EMOTIONAL INDEX}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 25000
+
+# Calculate the mean "panas" score for participants in the treatment condition.
+mean_treatment <- mean(data %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("panas")) # Select the "panas" column to take the mean of.
+                          
+# Calculate the mean "panas" score for participants in the control condition.
+mean_control <- mean(data %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("panas")) # Select the "panas" column to take the mean of.
+  
+# Calculate the difference "panas_beta" between the treatment and control means.
+panas_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 10,000 times (n_boots = 10000).
+    boot <- data %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas")) - mean(boot %>% filter(condition == "control") %>% pull("panas"))}) # Calculate difference between mean treatment "panas" and mean control "panas".
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Calculate a 90% confidence interval for the bootstraps.
+ci_90 <- quantile(boots, probs = c(0.05, 0.95)) # Save the 5th (lower bound) and 95th (upper bound) percentile of the bootstraps.
+
+# Save the 90% and 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 3.
+panas_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+panas_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+panas_ci_90_lo <- c(round(ci_90[1], 4)) # Round to 4 digits.
+panas_ci_90_hi <- c(round(ci_90[2], 4)) # Round to 4 digits.
+
+# Run a t-test on panas score between treatment and control groups.
+t_test <- t.test(data %>% filter(condition == "treat") %>% pull("panas"), # Compare treatment and condition groups, with "panas" as the dependent variable.
+                 data %>% filter(condition == "control") %>% pull("panas"),
+                 var.equal = TRUE, na.action = na.omit)
+
+# Save the p-value of the t-test, which will be used when creating Figure 3.
+panas_p_value <- t_test$p.value
+
+# Print results.
+print(c("panas_beta", panas_beta))
+print(c("panas_ci_95_lo", panas_ci_95_lo[[1]]))
+print(c("panas_ci_95_hi", panas_ci_95_hi[[1]]))
+print(c("panas_ci_90_lo", panas_ci_90_lo[[1]]))
+print(c("panas_ci_90_hi", panas_ci_90_hi[[1]]))
+print(c("panas_p_value", panas_p_value))
+  
+# Remove unnecessary dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95, ci_90, t_test)
+```
+
+# POLITICAL ATTITUDES BOOTSTRAP ANALYSIS: CHANGE IN AFFECTIVE POLARIZATION.
+```{r POLITICAL ATTITUDES BOOTSTRAP ANALYSIS: CHANGE IN AFFECTIVE POLARIZATION}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 25000
+
+# Create dataframe "data_ap" which does not contain the participant who identified as "Pure Independents".
+data_ap <- subset(data, pid7 != "Pure Independent")
+
+# Calculate the mean "affective_polarization" score for participants in the treatment condition.
+mean_treatment <- mean(data_ap %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("affective_polarization")) # Select the "affective_polarization" column to take the mean of.
+                          
+# Calculate the mean "affective_polarization" score for participants in the control condition.
+mean_control <- mean(data_ap %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("affective_polarization")) # Select the "affective_polarization" column to take the mean of.
+  
+# Calculate the difference "delta_ih_beta" between the treatment and control means.
+affective_polarization_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 10,000 times (n_boots = 10000).
+    boot <- data_ap %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("affective_polarization")) - mean(boot %>% filter(condition == "control") %>% pull("affective_polarization"))}) # Calculate difference between mean treatment "affective_polarization" and mean control "affective_polarization".
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Calculate a 90% confidence interval for the bootstraps.
+ci_90 <- quantile(boots, probs = c(0.05, 0.95)) # Save the 5th (lower bound) and 95th (upper bound) percentile of the bootstraps.
+
+# Save the 90% and 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 3.
+affective_polarization_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+affective_polarization_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+affective_polarization_ci_90_lo <- c(round(ci_90[1], 4)) # Round to 4 digits.
+affective_polarization_ci_90_hi <- c(round(ci_90[2], 4)) # Round to 4 digits.
+
+# Run a t-test on affective_polarization score between treatment and control groups.
+t_test <- t.test(data_ap %>% filter(condition == "treat") %>% pull("affective_polarization"), # Compare treatment and condition groups, with "affective_polarization" as the dependent variable.
+                 data_ap %>% filter(condition == "control") %>% pull("affective_polarization"),
+                 var.equal = TRUE, na.action = na.omit)
+
+# Save the p-value of the t-test, which will be used when creating Figure 3.
+affective_polarization_p_value <- t_test$p.value
+  
+# Print results.
+print(c("affective_polarization_beta", affective_polarization_beta))
+print(c("affective_polarization_ci_95_lo", affective_polarization_ci_95_lo[[1]]))
+print(c("affective_polarization_ci_95_hi", affective_polarization_ci_95_hi[[1]]))
+print(c("affective_polarization_ci_90_lo", affective_polarization_ci_90_lo[[1]]))
+print(c("affective_polarization_ci_90_hi", affective_polarization_ci_90_hi[[1]]))
+print(c("affective_polarization_p_value", affective_polarization_p_value))
+
+# Remove unnecessary dataframes/vectors.
+rm(n_boots, data_ap, mean_treatment, mean_control, boots, ci_95, ci_90, t_test)
+
+```
+
+# POLITICAL ATTITUDES BOOTSTRAP ANALYSIS: MODERATION OF FOCAL POLICY POSITION.
+```{r POLITICAL ATTITUDES BOOTSTRAP ANALYSIS: MODERATION OF FOCAL POLICY POSITION}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 25000
+
+# Calculate the mean "extremity_post_less_pre" score for participants in the treatment condition.
+mean_treatment <- mean(data %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("extremity_post_less_pre")) # Select the "extremity_post_less_pre" column to take the mean of.
+                          
+# Calculate the mean "extremity_post_less_pre" score for participants in the control condition.
+mean_control <- mean(data %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("extremity_post_less_pre")) # Select the "extremity_post_less_pre" column to take the mean of.
+  
+# Calculate the difference "extremity_post_less_pre_beta" between the treatment and control means.
+extremity_post_less_pre_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 10,000 times (n_boots = 10000).
+    boot <- data %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("extremity_post_less_pre")) - mean(boot %>% filter(condition == "control") %>% pull("extremity_post_less_pre"))}) # Calculate difference between mean treatment "extremity_post_less_pre" and mean control "extremity_post_less_pre".
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Calculate a 90% confidence interval for the bootstraps.
+ci_90 <- quantile(boots, probs = c(0.05, 0.95)) # Save the 5th (lower bound) and 95th (upper bound) percentile of the bootstraps.
+
+# Save the 90% and 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 3.
+extremity_post_less_pre_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+extremity_post_less_pre_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+extremity_post_less_pre_ci_90_lo <- c(round(ci_90[1], 4)) # Round to 4 digits.
+extremity_post_less_pre_ci_90_hi <- c(round(ci_90[2], 4)) # Round to 4 digits.
+
+# Run a t-test on extremity_post_less_pre score between treatment and control groups.
+t_test <- t.test(data %>% filter(condition == "treat") %>% pull("extremity_post_less_pre"), # Compare treatment and condition groups, with "extremity_post_less_pre" as the dependent variable.
+                 data %>% filter(condition == "control") %>% pull("extremity_post_less_pre"),
+                 var.equal = TRUE, na.action = na.omit)
+
+# Save the p-value of the t-test, which will be used when creating Figure 3.
+extremity_post_less_pre_p_value <- t_test$p.value
+
+# Print results.
+print(c("extremity_post_less_pre_beta", extremity_post_less_pre_beta))
+print(c("extremity_post_less_pre_ci_95_lo", extremity_post_less_pre_ci_95_lo[[1]]))
+print(c("extremity_post_less_pre_ci_95_hi", extremity_post_less_pre_ci_95_hi[[1]]))
+print(c("extremity_post_less_pre_ci_90_lo", extremity_post_less_pre_ci_90_lo[[1]]))
+print(c("extremity_post_less_pre_ci_90_hi", extremity_post_less_pre_ci_90_hi[[1]]))
+print(c("extremity_post_less_pre_p_value", extremity_post_less_pre_p_value))
+
+# Remove unnecessary dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95, ci_90, t_test)
+```
+
+
+# SK: BOOTSTRAP ANALYSIS -- SIMULTANEOUS BOOTSTRAP
+```{r}
+
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 25000
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 10,000 times (n_boots = 10000).
+    tx <- data %>% sample_frac(1, replace = TRUE) %>% filter(condition == "treat") %>% select(outcomes) %>% apply(., 2, mean, na.rm = TRUE)
+    ctrl <- data %>% sample_frac(1, replace = TRUE) %>% filter(condition == "control") %>% select(outcomes) %>% apply(., 2, mean, na.rm = TRUE)
+    tx - ctrl
+}) # Calculate difference between mean treatment "panas_pos" and mean control "panas_pos".
+  
+
+## compute confidence intervals from bootstrap samples
+ci_df <- apply(boots, 1, function(x)
+  quantile(x, probs = c(0.025, 0.05, 0.95, 0.975))) %>% # find 0.025, 0.05, 0.95, 0.975 quantiles of bootstraps for each outcome
+  t() %>% # each row should represent CIs for a single outcome
+  as.data.frame() %>% 
+  rename( # rename percentile labels to describe how they are used in confidence interval construction
+    'Lower_CI_95' = `2.5%`,
+    'Lower_CI_90' = `5%`,
+    'Upper_CI_90' = `95%`,
+    'Upper_CI_95' = `97.5%`
+  ) %>%
+  mutate(label = row.names(.)) # add outcome at row level
+
+pval_df <- sapply(outcomes, # run a t-test for each outcome and calculate p-value
+                  function(x) {
+                    t.test(
+                      data %>% filter(condition == 'treat') %>% .[[x]],
+                      data %>% filter(condition == 'control') %>% .[[x]],
+                      var.equal = TRUE,
+                      na.omit = TRUE
+                    )$p.value
+                  }
+      ) %>% 
+      data.frame() %>% # convert to data frame object
+      rename('P.value' = '.') %>% # rename column
+      mutate(label = row.names(.)) # add outcome column
+
+coef_df <- sapply(outcomes, # calculate diff in means pt estimate for each outcome
+                  function(x) {
+                    tx <- data %>% filter(condition == 'treat') %>% .[[x]] %>% mean(na.rm = TRUE)
+                    ctrl <- data %>% filter(condition == 'control') %>% .[[x]] %>% mean(na.rm = TRUE)
+                    tx - ctrl
+                  }
+      ) %>% 
+      data.frame() %>% # convert to data frame object
+      rename('Coefficient' = '.') %>% # rename column
+      mutate(label = row.names(.)) # add outcome column
+
+
+data_all_outcomes <- inner_join(ci_df, pval_df, by = 'label') %>% inner_join(coef_df, by = 'label')
+
+# what label should we use for each outcome?
+label_df <- tribble(
+  ~orig, ~Outcome,
+  'ih_a_all', "Language in posts and comments indicative of humility",
+  'delta_ih', 'Change in self-reported humility',
+  'ih_engagement', 'Liked and disliked humble content',
+  'panas_pos', "Positive emotional index",
+  'panas_neg', "Negative emotional index",
+  'panas', "Composite emotional index",
+  'affective_polarization', "Change in affective polarization", 
+  'extremity_post_less_pre', "Moderation of focal policy position"
+)
+
+# update outcomes and p-values
+data_all_outcomes <- inner_join(data_all_outcomes, label_df, by = c('label' = 'orig')) %>%
+  mutate(Color = case_when(
+    P.value >=0.05 ~ "grey", # When the p-value is >=0.05, assign the color grey.
+    P.value <0.05 ~ "black"))
+
+## separate data based on outcome grouping
+data_intellectual_humility <- data_all_outcomes %>% 
+  filter(label %in% c('ih_a_all', 'delta_ih', 'ih_engagement'))
+data_emotional_experience <- data_all_outcomes %>%
+  filter(label %in% c('panas_pos', 'panas_neg', 'panas'))
+data_political_attitudes <- data_all_outcomes %>%
+  filter(label %in% c('affective_polarization', 'extremity_post_less_pre'))
+```
+
+
+# SAVE ALL ANALYSES AS DATAFRAMES.
+```{r SAVE ALL ANALYSES AS DATAFRAMES}
+# # Create dataframe "data_intellectual_humility" which contains all the bootstrap analyses for intellectual humility measures in one dataframe.
+# data_intellectual_humility <- data.frame(
+#   Outcome = factor(c("Language in posts and comments indicative of humility", # Identify the specific outcomes.
+#                       "Change in self-reported humility", 
+#                       "Liked and disliked humble content")),
+#   Coefficient = c(ih_langauge_beta, delta_ih_beta, ih_engagement_beta), # Beta coefficients are the differences between treatment and control means.
+#   Lower_CI_95 = c(ih_langauge_ci_95_lo, delta_ih_ci_95_lo, ih_engagement_ci_95_lo), # Lower bounds of the 95% confidence interval.
+#   Upper_CI_95 = c(ih_langauge_ci_95_hi, delta_ih_ci_95_hi, ih_engagement_ci_95_hi), # Upper bounds of the 95% confidence interval.
+#   Lower_CI_90 = c(ih_langauge_ci_90_lo, delta_ih_ci_90_lo, ih_engagement_ci_90_lo), # Lower bounds of the 90% confidence interval.
+#   Upper_CI_90 = c(ih_langauge_ci_90_hi, delta_ih_ci_90_hi, ih_engagement_ci_90_hi), # Upper bounds of the 90% confidence interval.
+#   P.value = c(ih_langauge_p_value, delta_ih_p_value, ih_engagement_p_value)) # P-values from the t-tests.
+# 
+# # Create dataframe "data_emotional_experience" which contains all the bootstrap analyses for emotional experience measures in one dataframe.
+# data_emotional_experience <- data.frame(
+#   Outcome = factor(c("Positive emotional index", # Identify the specific outcomes.
+#                      "Negative emotional index",
+#                      "Composite emotional index")),
+#   Coefficient = c(panas_pos_beta, panas_neg_beta, panas_beta), # Beta coefficients are the differences between treatment and control means.
+#   Lower_CI_95 = c(panas_pos_ci_95_lo, panas_neg_ci_95_lo, panas_ci_95_lo), # Lower bounds of the 95% confidence interval.
+#   Upper_CI_95 = c(panas_pos_ci_95_hi, panas_neg_ci_95_hi, panas_ci_95_hi), # Upper bounds of the 95% confidence interval.
+#   Lower_CI_90 = c(panas_pos_ci_90_lo, panas_neg_ci_90_lo, panas_ci_90_lo), # Lower bounds of the 90% confidence interval.
+#   Upper_CI_90 = c(panas_pos_ci_90_hi, panas_neg_ci_90_hi, panas_ci_90_hi), # Upper bounds of the 90% confidence interval.
+#   P.value = c(panas_pos_p_value, panas_neg_p_value, panas_p_value)) # P-values from the t-tests.
+# 
+# # Create dataframe "data_political_attitudes" which contains all the bootstrap analyses for political attitude measures in one dataframe.
+# data_political_attitudes <- data.frame(
+#   Outcome = factor(c("Change in affective polarization", # Identify the specific outcomes.
+#                      "Moderation of focal policy position")),
+#   Coefficient = c(affective_polarization_beta, extremity_post_less_pre_beta), # Beta coefficients are the differences between treatment and control means.
+#   Lower_CI_95 = c(affective_polarization_ci_95_lo, extremity_post_less_pre_ci_95_lo), # Lower bounds of the 95% confidence interval.
+#   Upper_CI_95 = c(affective_polarization_ci_95_hi, extremity_post_less_pre_ci_95_hi), # Upper bounds of the 95% confidence interval.
+#   Lower_CI_90 = c(affective_polarization_ci_90_lo, extremity_post_less_pre_ci_90_lo), # Lower bounds of the 90% confidence interval.
+#   Upper_CI_90 = c(affective_polarization_ci_90_hi, extremity_post_less_pre_ci_90_hi), # Upper bounds of the 90% confidence interval.
+#   P.value = c(affective_polarization_p_value, extremity_post_less_pre_p_value)) # P-values from the t-tests.
+
+# Assign color to data_intellectual_humility based off of p-value significance (black = significant, grey = not significant).
+# data_intellectual_humility <- data_intellectual_humility %>% 
+#   mutate(Color = case_when(
+#     P.value >=0.05 ~ "grey", # When the p-value is >=0.05, assign the color grey.
+#     P.value <0.05 ~ "black")) # When the p-value is <0.05, assign the color black.
+# 
+# # Assign color to data_emotional_experience based off of p-value significance (black = significant, grey = not significant).
+# data_emotional_experience <- data_emotional_experience %>% 
+#   mutate(Color = case_when(
+#     P.value >=0.05 ~ "grey", # When the p-value is >=0.05, assign the color grey.
+#     P.value <0.05 ~ "black")) # When the p-value is <0.05, assign the color black.
+# 
+# # Assign color to data_political_attitudes based off of p-value significance (black = significant, grey = not significant)
+# data_political_attitudes <- data_political_attitudes %>% 
+#   mutate(Color = case_when(
+#     P.value >=0.05 ~ "grey", # When the p-value is >=0.05, assign the color grey.
+#     P.value <0.05 ~ "black")) # When the p-value is <0.05, assign the color black.
+# 
+# # Final dataframes.
+# print(data_intellectual_humility)
+# print(data_emotional_experience)
+# print(data_political_attitudes)
+
+```
+
+# FIGURE FORMATTING: INTELLECTUAL HUMILITY.
+```{r FIGURE FORMATTING: INTELLECTUAL HUMILITY}
+# Add the beta-coefficients and error bars to the graph.
+figure_intellectual_humility <- ggplot(data_intellectual_humility) + # Define dataset, x, y and color variables.
+  geom_point(size=8, aes(x=Coefficient, y=Outcome, color = Color), show.legend = FALSE) + # Create points on the graph for the beta-coefficients. define the size of the point as 8.
+  geom_errorbarh(aes(y=Outcome, xmin=Lower_CI_90, xmax=Upper_CI_90, color = Color), # Create error bars for the 90% confidence interval.
+                 linewidth=2, height = 0, show.legend = FALSE) + # Define line width as 2 and height as 0 (this ensures that the error bar is just a line with no end bars).
+  geom_errorbarh(aes(y=Outcome, xmin=Lower_CI_95, xmax=Upper_CI_95, color = Color), # Create error bars for the 95% confidence interval.
+                 linewidth=1, height=0, show.legend = FALSE, lineend = "round") # Define line width as 1 and height as 0 (this ensures that the error bar is just a line with no end bars).
+  
+# Add a dotted vertical line at 0.
+figure_intellectual_humility <- figure_intellectual_humility +
+  geom_vline(xintercept=0, linetype="dotted", linewidth=2)  
+
+# Change the background colors of the graph.
+figure_intellectual_humility <- figure_intellectual_humility +
+  theme_minimal() # Change the background of the graph to be white with grey grid lines.
+
+# Y-Axis.
+figure_intellectual_humility <- figure_intellectual_humility +
+  scale_y_discrete(limits = rev(c("Language in posts and comments indicative of humility", # Fix the order of the outcomes.
+                      "Change in self-reported humility", 
+                      "Liked and disliked humble content")),
+                   labels = function(x) str_wrap(x, width = 20)) + # Condense the size of the outcome labels, so that they are split in 2-3 lines.
+  ylab("Intellectual\nHumility") + # Title the y-axis with the outcome group ("Intellectual Humility").
+  theme(axis.title.y = element_text(margin = margin(t = 0, r = 95, b = 0, l = 0), # Define the size of the margins of the y-axis title (t = top, r = right, b = bottom, l = left).
+                                    size=24, face="bold"), # Define the text size as 24, and bold the text.
+        axis.text.y = element_text(margin = margin(t = 0, r = 80, b = 0, l = 0), # Define the size of the margins of the outcome labels (t = top, r = right, b = bottom, l = left).
+                                   size=14, hjust = 0.5), # Define the text size as 14, and center the text.
+        text = element_text(family="Verdana")) # Define the text font as "Verdana".
+
+# X-axis.
+figure_intellectual_humility <- figure_intellectual_humility + 
+  scale_x_continuous(labels=NULL, limits = c(-0.26, 0.26)) + # Get rid of the x-axis labels (this is important for when the figures are stitched together), limit the x-axis between the range of -0.26 to 0.26.
+  xlab(NULL) # Get rid of x-axis title.
+
+# Colors.
+figure_intellectual_humility <- figure_intellectual_humility + 
+  scale_color_identity() # Ensure the colors of the points/bars are in accordance with the significance colors stated in the dataframe.
+
+# Final intellectual humility outcomes plot.
+print(figure_intellectual_humility)
+```
+
+# FIGURE FORMATTING: EMOTIONAL EXPERIENCE.
+```{r FIGURE FORMATTING: EMOTIONAL EXPERIENCE}
+# Add the beta-coefficients and error bars to the graph.
+figure_emotional_experience <- ggplot(data_emotional_experience, aes(x=Coefficient, y=Outcome, color = Color)) + # Define dataset, x, y and color variables.
+  geom_point(size=8, show.legend = FALSE) + # Create points on the graph for the beta-coefficients. define the size of the point as 8.
+  geom_errorbarh(aes(y=Outcome, xmin=Lower_CI_90, xmax=Upper_CI_90, color = Color), # Create error bars for the 90% confidence interval.
+                 linewidth=2, height = 0, show.legend = FALSE) + # Define line width as 2 and height as 0 (this ensures that the error bar is just a line with no end bars).
+  geom_errorbarh(aes(y=Outcome, xmin=Lower_CI_95, xmax=Upper_CI_95, color = Color), # Create error bars for the 95% confidence interval.
+                 linewidth=1, height=0, show.legend = FALSE, lineend = "round") # Define line width as 1 and height as 0 (this ensures that the error bar is just a line with no end bars).
+  
+# Add a dotted vertical line at 0.
+figure_emotional_experience <- figure_emotional_experience +
+  geom_vline(xintercept=0, linetype="dotted", size=2) 
+
+# Change the background colors of the graph.
+figure_emotional_experience <- figure_emotional_experience +
+  theme_minimal() # Change the background of the graph to be white with grey grid lines.
+
+# Y-Axis
+figure_emotional_experience <- figure_emotional_experience +
+  scale_y_discrete(limits = rev(c("Positive emotional index", # Fix the order of the outcomes.
+                      "Negative emotional index", 
+                      "Composite emotional index")),
+                   labels = function(x) str_wrap(x, width = 20)) + # Condense the size of the outcome labels, so that they are split in 2-3 lines.
+  ylab("Emotional\nExperience") + # Title the y-axis with the outcome group ("Emotional Experience").
+  theme(axis.title.y = element_text(margin = margin(t = 0, r = 95, b = 0, l = 0), # Define the size of the margins of the y-axis title (t = top, r = right, b = bottom, l = left).
+                                    size=24, face="bold"), # Define the text size as 24, and bold the text.
+        axis.text.y = element_text(margin = margin(t = 0, r = 80, b = 0, l = 0), # Define the size of the margins of the outcome labels (t = top, r = right, b = bottom, l = left).
+                                   size=14, hjust = 0.5), # Define the text size as 14, and center the text.
+        text = element_text(family="Verdana")) # Define the text font as "Verdana".
+
+# X-axis.
+figure_emotional_experience <- figure_emotional_experience + 
+  scale_x_continuous(labels=NULL, limits = c(-0.26, 0.26)) + # Get rid of the x-axis labels (this is important for when the figures are stitched together), limit the x-axis between the range of -0.26 to 0.26.
+  xlab(NULL) # Get rid of x-axis title.
+
+# Colors.
+figure_emotional_experience <- figure_emotional_experience + 
+  scale_color_identity()  # Ensure the colors of the points/bars are in accordance with the significance colors stated in the dataframe.
+  
+# Final emotional experience outcomes plot.
+print(figure_emotional_experience)
+```
+
+# FIGURE FORMATTING: POLITICAL ATTITUDES.
+```{r FIGURE FORMATTING: POLITICAL ATTITUDES}
+# Add the beta-coefficients and error bars to the graph.
+figure_political_attitudes <- ggplot(data_political_attitudes, aes(x=Coefficient, y=Outcome, color = Color)) + # Define dataset, x, y and color variables.
+  geom_point(size=8, show.legend = FALSE) + # Create points on the graph for the beta-coefficients. define the size of the point as 8.
+  geom_errorbarh(aes(y=Outcome, xmin=Lower_CI_90, xmax=Upper_CI_90, color = Color), # Create error bars for the 90% confidence interval.
+                 linewidth=2, height = 0, show.legend = FALSE) + # Define line width as 2 and height as 0 (this ensures that the error bar is just a line with no end bars).
+  geom_errorbarh(aes(y=Outcome, xmin=Lower_CI_95, xmax=Upper_CI_95, color = Color), # Create error bars for the 95% confidence interval.
+                 linewidth=1, height=0, show.legend = FALSE, lineend = "round") # Define line width as 1 and height as 0 (this ensures that the error bar is just a line with no end bars).
+  
+# Add a dotted vertical line at 0.
+figure_political_attitudes <- figure_political_attitudes +
+  geom_vline(xintercept=0, linetype="dotted", size=2)  
+
+# Change the background colors of the graph.
+figure_political_attitudes <- figure_political_attitudes +
+  theme_minimal() # Change the background of the graph to be white with grey grid lines.
+
+# Y-Axis.
+figure_political_attitudes <- figure_political_attitudes +
+  scale_y_discrete(limits = rev(c("Change in affective polarization", # Fix the order of the outcomes.
+                      "Moderation of focal policy position")),
+                   labels = function(x) str_wrap(x, width = 20)) + # Condense the size of the outcome labels, so that they are split in 2-3 lines.
+  ylab("Political\nAttitudes") + # Title the y-axis with the outcome group ("Political Attitudes").
+  theme(axis.title.y = element_text(margin = margin(t = 0, r = 95, b = 0, l = 0), # Define the size of the margins of the y-axis title (t = top, r = right, b = bottom, l = left).
+                                    size=24, face="bold"), # Define the text size as 24, and bold the text.
+        axis.text.y = element_text(margin = margin(t = 0, r = 80, b = 0, l = 0), # Define the size of the margins of the outcome labels (t = top, r = right, b = bottom, l = left).
+                                   size=14, hjust = 0.5), # Define the text size as 14, and center the text.
+        text = element_text(family="Verdana")) # Define the text font as "Verdana".
+
+# X-axis.
+figure_political_attitudes <- figure_political_attitudes + 
+  scale_x_continuous(limits = c(-0.26, 0.26)) + # Get rid of the x-axis labels (this is important for when the figures are stitched together), limit the x-axis between the range of -0.26 to 0.26.
+  xlab("Treatment effect (in SDs)") + # Since this plot will be the last one to be stitched together, include the x-axis label "Treatment effect (in SDs)".
+  theme(axis.title.x = element_text(margin=margin(t = 25, r = 0, b = 0, l = 0), # Define the size of the margins of the x-axis title (t = top, r = right, b = bottom, l = left).
+                                    size=18, face="bold"), # Define the text size as 18, and bold the text.
+        text = element_text(family="Verdana")) # Define the text font as "Verdana".
+
+# Colors.
+figure_political_attitudes <- figure_political_attitudes + 
+  scale_color_identity()  # ensure the colors of the points/bars are in accordance with the significance colors stated in the dataframe.
+  
+# Final political attitudes outcomes plot.
+print(figure_political_attitudes)
+```
+
+# COMBINE INTELLECTUAL HUMILITY, EMOTIONAL EXPERIENCE, AND POLITICAL ATTITUDES FIGURES INTO FINAL FIGURE.
+```{r COMBINE INTELLECTUAL HUMILITY, EMOTIONAL EXPERIENCE, AND POLITICAL ATTITUDES FIGURES INTO FINAL FIGURE}
+# Combine the intellectual humility, emotional experience, and political attitudes plot together into the final figure three.
+figure_3 <- ggarrange(figure_intellectual_humility, figure_emotional_experience, figure_political_attitudes, ncol=1, heights = c(3.5,3.5,3), align = "v") # align the three plots vertically ("v") and define the heights as 3.5, 3.5, 3, respectively.
+```
+
+# FINAL FIGURE.
+```{r FINAL FIGURE}
+print(figure_3)
+```
+
+# REMOVE EXTRA DATAFRAMES AND VALUES FROM ENVIRONMENT.
+```{r REMOVE EXTRA DATAFRAMES AND VALUES FROM ENVIRONMENT}
+# Remove extra dataframes and values from environment.
+# rm(list=ls())
+```
+

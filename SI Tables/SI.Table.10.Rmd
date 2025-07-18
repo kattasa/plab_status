@@ -1,0 +1,285 @@
+---
+title: "SI.Table.10"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# DATA FORMATTING FOR CHI-SQUARE VARIABLES.
+```{r DATA FORMATTING FOR CHI-SQUARE VARIABLES}
+###############RACE###############
+
+# Create dataframe "race" which counts the number of participants who identified with each race.
+race <- data %>%
+  group_by(condition) %>% # Group participant responses by experimental condition (treatment, control).
+  count(race_new) # Count the number of participants who identified with each race.
+
+# Reorganize the dataframe.
+race <- race %>% 
+  pivot_wider(id_cols = 'condition', names_from = 'race_new', values_from = 'n') # Each row is an experimental condition, each column is a race response category, and the values in the cells are the counts corresponding to the condition/race pair.
+
+# Add row names.
+race <- race %>% 
+  column_to_rownames('condition') # The column "condition" is now the row names for the dataframe.
+
+# Convert the dataframe to a matrix.
+race <- as.matrix(race)
+
+###############3 POINT PARTY IDENTITY###############
+
+# Create dataframe "pid3" which counts the number of participants who identified with each political party.
+pid3 <- data %>%
+  group_by(condition) %>% # Group participant responses by experimental condition (treatment, control).
+  count(pid3) # Count the number of participants who identified with each political party.
+
+# Reorganize the dataframe.
+pid3 <- pid3 %>% 
+  pivot_wider(id_cols = 'condition', names_from = 'pid3', values_from = 'n')  # Each row is an experimental condition, each column is a political party response category, and the values in the cells are the counts corresponding to the condition/political party pair.
+
+# Add row names.
+pid3 <- pid3 %>% 
+  column_to_rownames('condition')  # The column "condition" is now the row names for the dataframe.
+
+# Convert the dataframe to a matrix.
+pid3 <- as.matrix(pid3)
+
+###############7 POINT PARTY IDENTITY###############
+
+# Create dataframe "pid7" which counts the number of participants who identified with each political party.
+pid7 <- data %>%
+  group_by(condition) %>% # Group participant responses by experimental condition (treatment, control).
+  count(pid7) # Count the number of participants who identified with each political party.
+
+# Reorganize the dataframe.
+pid7 <- pid7 %>% 
+  pivot_wider(id_cols = 'condition', names_from = 'pid7', values_from = 'n') # Each row is an experimental condition, each column is a political party response category, and the values in the cells are the counts corresponding to the condition/political party pair.
+
+# Add row names.
+pid7 <- pid7 %>% 
+  column_to_rownames('condition')  # The column "condition" is now the row names for the dataframe.
+
+# Convert the dataframe to a matrix.
+pid7 <- as.matrix(pid7)
+
+###############IDEOLOGY###############
+
+# Create dataframe "ideo7" which counts the number of participants who identified with each political ideology.
+ideo7 <- data %>%
+  group_by(condition) %>% # Group participant responses by experimental condition (treatment, control).
+  count(ideo7) # Count the number of participants who identified with each political ideology.
+
+# Reorganize the dataframe.
+ideo7 <- ideo7 %>% 
+  pivot_wider(id_cols = 'condition', names_from = 'ideo7', values_from = 'n') # Each row is an experimental condition, each column is a political ideology response category, and the values in the cells are the counts corresponding to the condition/political ideology pair.
+
+# Add row names.
+ideo7 <- ideo7 %>% 
+  column_to_rownames('condition') # The column "condition" is now the row names for the dataframe.
+
+# Convert the dataframe to a matrix.
+ideo7 <- as.matrix(ideo7)
+
+###############EDUCATION###############
+
+# Create dataframe "educ_new" which counts the number of participants who selected each education level response.
+educ_new <- data %>%
+  group_by(condition) %>% # Group participant responses by experimental condition (treatment, control).
+  count(educ_new) # Count the number of participants who selected each education level response.
+
+# Reorganize the dataframe.
+educ_new <- educ_new %>% 
+  pivot_wider(id_cols = 'condition', names_from = 'educ_new', values_from = 'n') # Each row is an experimental condition, each column is an education level response category, and the values in the cells are the counts corresponding to the condition/education level pair.
+
+# Add row names.
+educ_new <- educ_new %>% 
+  column_to_rownames('condition') # The column "condition" is now the row names for the dataframe.
+
+# Convert the dataframe to a matrix.
+educ_new <- as.matrix(educ_new)
+
+###############PRE-TREATMENT GUN CONTROL VIEWS###############
+
+# Create dataframe "pre_policy_gc" which counts the number of participants who selected each gun control policy view.
+pre_policy_gc <- data %>%
+  group_by(condition) %>% # Group participant responses by experimental condition (treatment, control).
+  count(pre_policy_gc) # Count the number of participants who selected each gun control policy view.
+
+# Reorganize the dataframe.
+pre_policy_gc <- pre_policy_gc %>% 
+  pivot_wider(id_cols = 'condition', names_from = 'pre_policy_gc', values_from = 'n') # Each row is an experimental condition, each column is a gun control policy view response category, and the values in the cells are the counts corresponding to the condition/gun control policy view level pair.
+
+# Add row names.
+pre_policy_gc <- pre_policy_gc %>% 
+  column_to_rownames('condition') # The column "condition" is now the row names for the dataframe.
+
+# Convert the dataframe to a matrix.
+pre_policy_gc <- as.matrix(pre_policy_gc)
+
+###############PRE-TREATMENT IMMIGRATION VIEWS###############
+
+# Create dataframe "pre_policy_imm" which counts the number of participants who selected each immigration policy view.
+pre_policy_imm <- data %>%
+  group_by(condition) %>% # Group participant responses by experimental condition (treatment, control).
+  count(pre_policy_imm) # Count the number of participants who selected each immigration policy view.
+
+# Reorganize the dataframe.
+pre_policy_imm <- pre_policy_imm %>% 
+  pivot_wider(id_cols = 'condition', names_from = 'pre_policy_imm', values_from = 'n') # Each row is an experimental condition, each column is an immigration policy view response category, and the values in the cells are the counts corresponding to the condition/immigration policy view level pair.
+
+# Add row names.
+pre_policy_imm <- pre_policy_imm %>% 
+  column_to_rownames('condition') # The column "condition" is now the row names for the dataframe.
+
+# Convert the dataframe to a matrix.
+pre_policy_imm <- as.matrix(pre_policy_imm)
+```
+
+# DATA FORMATTING FOR KOLMOGOROV-SMIRNOV VARIABLES.
+```{r DATA FORMATTING FOR KOLMOGOROV-SMIRNOV VARIABLES}
+###############AGE###############
+
+# Create dataframe "age_treat" which contains the ages of participants in the treatment condition.
+age_treat <- data %>% 
+  filter(condition == "treat") %>% # Filter the data to contain only participants in the treatment condition.
+  pull(age) # Select the column "age", and pull the values contained in it.
+
+# Create dataframe "age_control" which contains the ages of participants in the control condition.
+age_control <- data %>% 
+  filter(condition == "control") %>%# Filter the data to contain only participants in the control condition.
+  pull(age) # Select the column "age", and pull the values contained in it.
+
+###############PRE-TREATMENT AFFECTIVE POLARIZATION###############
+
+# Create dataframe "pre_ap_treat" which contains the pre-treatment affective polarization of participants in the treatment condition.
+pre_ap_treat <- data %>% 
+  filter(condition == "treat") %>% # Filter the data to contain only participants in the treatment condition.
+  pull(pre_affective_polarization) # Select the column "pre_affective_polarization", and pull the values contained in it.
+
+# Create dataframe "pre_ap_control" which contains the pre-treatment affective polarization of participants in the control condition.
+pre_ap_control <- data %>% 
+  filter(condition == "control") %>% # Filter the data to contain only participants in the control condition.
+  pull(pre_affective_polarization) # Select the column "pre_affective_polarization", and pull the values contained in it.
+
+###############PRE-TREATMENT INTELLECTUAL HUMILITY###############
+
+# Create dataframe "pre_ih_treat" which contains the pre-treatment intellectual humility of participants in the treatment condition.
+pre_ih_treat <- data %>% 
+  filter(condition == "treat") %>% # Filter the data to contain only participants in the treatment condition.
+  pull(pre_ih) # Select the column "pre_ih", and pull the values contained in it.
+
+# Create dataframe "pre_ih_control" which contains the pre-treatment intellectual humility of participants in the control condition.
+pre_ih_control <- data %>% 
+  filter(condition == "control") %>%  # Filter the data to contain only participants in the control condition.
+  pull(pre_ih) # Select the column "pre_ih", and pull the values contained in it.
+```
+
+# CALCULATE CHI-SQUARE AND KOLMOGOROV-SMIRNOV TESTS.
+```{r CALCULATE CHI-SQUARE AND KOLMOGOROV-SMIRNOV TESTS}
+###############CHI-SQUARE###############
+
+# Chi-square test: race. Save results as "chi.sqr.race".
+chi.sqr.race <- chisq.test(race)
+
+# Chi-square test: 3 point party identity. Save results as "chi.sqr.pid3".
+chi.sqr.pid3 <- chisq.test(pid3)
+
+# Chi-square test: 7 point party identity. Save results as "chi.sqr.pid7".
+chi.sqr.pid7 <- chisq.test(pid7)
+
+# Chi-square test: ideology. Save results as "chi.sqr.ideo7".
+chi.sqr.ideo7 <- chisq.test(ideo7)
+
+# Chi-square test: education. Save results as "chi.sqr.educ_new".
+chi.sqr.educ_new <- chisq.test(educ_new)
+
+# Chi-square test: pre-treatment gun control views. Save results as "chi.sqr.pre_policy_gc".
+chi.sqr.pre_policy_gc <- chisq.test(pre_policy_gc)
+
+# Chi-square test: pre-treatment immigration views. Save results as "chi.sqr.pre_policy_imm".
+chi.sqr.pre_policy_imm <- chisq.test(pre_policy_imm)
+
+###############KOLMOGOROV-SMIRNOV###############
+
+# Kolmogorov-Smirnov test: age. Save results as "ks.age".
+ks.age <- ks.test(age_treat, age_control)
+
+# Kolmogorov-Smirnov test: pre-treatment affective polarization. Save results as "ks.pre_ap".
+ks.pre_ap <- ks.test(pre_ap_treat, pre_ap_control)
+
+# Kolmogorov-Smirnov test: pre-treatment intellectual humility. Save results as "ks.pre_ih".
+ks.pre_ih <- ks.test(pre_ih_treat, pre_ih_control)
+```
+
+# FORMAT TABLE.
+```{r FORMAT TABLE}
+# Create empty dataframe "table10", with columns "Variable", "Test", and "p value".
+table10 <- tibble(Variable = character(), Test = character(), `p value` = numeric()) # "Variable" and "Test" will contain character values. "p value" will contain numeric values.
+
+# Add a row to "table10" pasting in results for the variable "Race".
+table10 <- table10 %>% 
+  add_row(Variable = "Race", Test = "Chi squared", `p value` = chi.sqr.race$p.value) # Define the variable, test, and p-value.
+
+# Add a row to "table10" pasting in results for the variable "3 point party identity".
+table10 <- table10 %>% 
+  add_row(Variable = "3 point Party Identity", Test = "Chi squared", `p value` = chi.sqr.pid3$p.value) # Define the variable, test, and p-value.
+
+# Add a row to "table10" pasting in results for the variable "7 point party identity".
+table10 <- table10 %>% 
+  add_row(Variable = "7 point Party Identity", Test = "Chi squared", `p value` = chi.sqr.pid7$p.value) # Define the variable, test, and p-value.
+
+# Add a row to "table10" pasting in results for the variable "Ideology".
+table10 <- table10 %>% 
+  add_row(Variable = "Ideology", Test = "Chi squared", `p value` = chi.sqr.ideo7$p.value) # Define the variable, test, and p-value.
+
+# Add a row to "table10" pasting in results for the variable "Education".
+table10 <- table10 %>% 
+  add_row(Variable = "Education", Test = "Chi squared", `p value` = chi.sqr.educ_new$p.value) # Define the variable, test, and p-value.
+
+# Add a row to "table10" pasting in results for the variable "Pre-treatment gun control views".
+table10 <- table10 %>% 
+  add_row(Variable = "Pre-treatment gun control views", Test = "Chi squared", `p value` = chi.sqr.pre_policy_gc$p.value) # Define the variable, test, and p-value.
+
+# Add a row to "table10" pasting in results for the variable "Pre-treatment immigration views".
+table10 <- table10 %>% 
+  add_row(Variable = "Pre-treatment immigration views", Test = "Chi squared", `p value` = chi.sqr.pre_policy_imm$p.value) # Define the variable, test, and p-value.
+
+# Add a row to "table10" pasting in results for the variable "Age".
+table10 <- table10 %>% 
+  add_row(Variable = "Age", Test = "KS test", `p value` = ks.age$p.value) # Define the variable, test, and p-value.
+
+# Add a row to "table10" pasting in results for the variable "Pre-treatment affective polarization".
+table10 <- table10 %>% 
+  add_row(Variable = "Pre-treatment affective polarization", Test = "KS test", `p value` = ks.pre_ap$p.value) # Define the variable, test, and p-value.
+
+# Add a row to "table10" pasting in results for the variable "Pre-treatment intellectual humility".
+table10 <- table10 %>% 
+  add_row(Variable = "Pre-treatment intellectual humility", Test = "KS test", `p value` = ks.pre_ih$p.value) # Define the variable, test, and p-value.
+
+# Round p-values to three decimal places.
+table10 <- table10 %>% 
+  mutate(`p value` = round(`p value`, 3))
+```
+
+# FINAL TABLE.
+```{r}
+print(table10)
+stargazer::stargazer(table10, summary = FALSE, rownames = FALSE)
+```
+
+

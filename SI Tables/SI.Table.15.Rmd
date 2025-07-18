@@ -1,0 +1,166 @@
+---
+title: "SI.Table.15"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES. 
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(MASS)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# FORMAT DATA.
+```{r FORMAT DATA}
+# Create total_engagement column.
+data <- data %>% 
+  mutate(total_engagement = total_likes + total_dislikes + num_comments) # Add total numbers of likes, dislikes, and comments.
+```
+
+# POISSON REGRESSION.
+```{r POISSON REGRESSION}
+# Run a poisson regression on condition and intellectual humility engagement without total engagement as a covariate. Save a summary as "poisson_without_covariate".
+poisson_without_covariate <- summary(glm(ih_engagement ~ condition, # Effect of condition on intellectual humility engagement.
+                                       family = poisson, # Define regression as poisson.
+                                       data = data)) # Define dataframe as data.
+
+# Save the poisson_without_covariate estimate, standard error, AIC, N value, and p-value in "poisson_without_covariate_results".
+poisson_without_covariate_results <- cbind(poisson_without_covariate$coefficients["conditiontreat", "Estimate"], # Save the estimate.
+                                           poisson_without_covariate$coefficients["conditiontreat", "Std. Error"], # Save the estimate standard error.
+                                           NA, # No covariate estimate.
+                                           NA, # No covariate standard error.
+                                           poisson_without_covariate$aic, # Save the AIC.
+                                           length(data$ih_engagement), # Save the N value.
+                                           poisson_without_covariate$coefficients["conditiontreat", "Pr(>|z|)"], # Save the p-value.
+                                           NA) # No covariate p-value.
+                                           
+# Run a poisson regression on condition and intellectual humility engagement with total engagement as a covariate. Save a summary as "poisson_with_covariate".
+poisson_with_covariate <- summary(glm(ih_engagement ~ condition + total_engagement, # Effect of condition and total_engagement (covariate) on intellectual humility engagement.
+                                    family = poisson, # Define regression as poisson.
+                                    data = data)) # Define dataframe as data.
+
+# Save the poisson_with_covariate estimates (including covariate), standard errors (including covariate), AIC, N value, and p-values (including covariate) in "poisson_with_covariate_results".
+poisson_with_covariate_results <- cbind(poisson_with_covariate$coefficients["conditiontreat", "Estimate"], # Save the estimate.
+                                           poisson_with_covariate$coefficients["conditiontreat", "Std. Error"], # Save the estimate standard error.
+                                           poisson_with_covariate$coefficients["total_engagement", "Estimate"], # Save the covariate estimate.
+                                           poisson_with_covariate$coefficients["total_engagement", "Std. Error"], # Save the covariate estimate standard error.
+                                           poisson_with_covariate$aic, # Save the AIC.
+                                           length(data$ih_engagement), # Save the N value.
+                                           poisson_with_covariate$coefficients["conditiontreat", "Pr(>|z|)"], # Save the p-value.
+                                           poisson_with_covariate$coefficients["total_engagement", "Pr(>|z|)"]) # Save the covariate p-value.
+```
+
+# NEGATIVE BINOMIAL REGRESSION.
+```{r NEGATIVE BINOMIAL REGRESSION}
+# Run a negative binomial regression on condition and intellectual humility engagement without total engagement as a covariate. Save a summary as "negative_binomial_without_covariate".
+negative_binomial_without_covariate <- summary(glm.nb(ih_engagement ~ condition, # Effect of condition on intellectual humility engagement.
+                                                    data = data)) # Define dataframe as data.
+
+# Save the negative_binomial_without_covariate estimate, standard error, AIC, N value, and p-value in "negative_binomial_without_covariate_results".
+negative_binomial_without_covariate_results <- cbind(negative_binomial_without_covariate$coefficients["conditiontreat", "Estimate"], # Save the estimate.
+                                                     negative_binomial_without_covariate$coefficients["conditiontreat", "Std. Error"], # Save the estimate standard error.
+                                                     NA, # No covariate estimate.
+                                                     NA, # No covariate standard error.
+                                                     negative_binomial_without_covariate$aic, # Save the AIC.
+                                                     length(data$ih_engagement), # Save the N value.
+                                                     negative_binomial_without_covariate$coefficients["conditiontreat", "Pr(>|z|)"], # Save the p-value.
+                                                     NA) # No covariate p-value.
+                                                   
+# Run a negative binomial regression on condition and intellectual humility engagement with total engagement as a covariate. Save a summary as "negative_binomial_with_covariate".
+negative_binomial_with_covariate <- summary(glm.nb(ih_engagement ~ condition + total_engagement, # Effect of condition and total_engagement (covariate) on intellectual humility engagement.
+                                           data = data)) # Define dataframe as data.
+
+# Save the negative_binomial_with_covariate estimates (including covariate), standard errors (including covariate), AIC, N-value, and p-values (including covariate) in "negative_binomial_with_covariate_results".
+negative_binomial_with_covariate_results <- cbind(negative_binomial_with_covariate$coefficients["conditiontreat", "Estimate"], # Save the estimate.
+                                                  negative_binomial_with_covariate$coefficients["conditiontreat", "Std. Error"], # Save the estimate standard error.
+                                                  negative_binomial_with_covariate$coefficients["total_engagement", "Estimate"], # Save the covariate estimate.
+                                                  negative_binomial_with_covariate$coefficients["total_engagement", "Std. Error"], # Save the covariate estimate standard error.
+                                                  negative_binomial_with_covariate$aic, # Save the AIC.
+                                                  length(data$ih_engagement), # Save the N value.
+                                                  negative_binomial_with_covariate$coefficients["conditiontreat", "Pr(>|z|)"], # Save the p-value.
+                                                  negative_binomial_with_covariate$coefficients["total_engagement", "Pr(>|z|)"]) # Save the covariate p-value.
+```
+
+# FORMAT REGRESSION RESULTS AND TABLE.
+```{r FORMAT REGRESSION RESULTS AND TABLE}
+# Bind together the regression results. 1 row = 1 regression (e.g., poisson_without_covariate is the first row).
+table15 <- as.data.frame(rbind(poisson_without_covariate_results, poisson_with_covariate_results, negative_binomial_without_covariate_results, negative_binomial_with_covariate_results))
+
+###############FORMAT REGRESSION RESULTS###############
+
+# Round all values to two decimal places.
+table15 <- round(table15, 2)
+
+# Assign names to the columns.
+colnames(table15) <- c("Estimate", "Standard Error", "Covariate Estimate", "Covariate Standard Error", "AIC", "N", "p-value no cov", "p-value with cov")
+
+# Round the AIC values to one decimal place.
+table15[,"AIC"] <- round(table15[,"AIC"],1)
+
+# Assign significance stars using the p-values of regressions with no covariates.
+table15 <- table15 %>% 
+  mutate(stars_no_cov = case_when(`p-value no cov` <= 0.001 ~ '***', # If the p-value is equal to or below 0.001, then assign three stars.
+                                  `p-value no cov` <= 0.01 ~ '**', # If the p-value is equal to or below 0.01, then assign two stars.
+                                  `p-value no cov` <= 0.05 ~ '*', # If the p-value is equal to or below 0.05, then assign one star. 
+                                  .default = ' '))
+
+# Assign significance stars using the p-values of regressions with covariates.
+table15 <- table15 %>% 
+  mutate(stars_with_cov = case_when(`p-value with cov` <= 0.001 ~ '***', # If the p-value is equal to or below 0.001, then assign three stars.
+                                    `p-value with cov` <= 0.01 ~ '**', # If the p-value is equal to or below 0.01, then assign two stars.
+                                    `p-value with cov` <= 0.05 ~ '*', # If the p-value is equal to or below 0.05, then assign one star. 
+                                    .default = ' '))
+
+# Paste the significance stars to the estimates.
+table15 <- table15  %>% 
+  mutate(Estimate = paste(Estimate, stars_no_cov)) # Paste together the estimates and the stars.
+
+# Paste the significance stars to the covariate estimates.
+table15 <- table15 %>% 
+  mutate(`Covariate Estimate` = paste(`Covariate Estimate`, stars_with_cov)) # Paste together the covariate estimates and the stars.
+
+# Organize the standard error values using the format: (standard error).
+table15 <- table15 %>% 
+  mutate(`Standard Error` = paste0("(", `Standard Error`, ")")) # Paste together parentheses and standard errors.
+
+# Organize the covariate standard error values using the format: (standard error covariate).
+table15 <- table15 %>% 
+  mutate(`Covariate Standard Error` = paste0("(", `Covariate Standard Error`, ")")) # Paste together parentheses and standard errors.
+
+###############FORMAT TABLE###############
+
+# Delete the p-value and significance star columns.
+table15 <- table15[ , !colnames(table15) %in% c("p-value no cov", "p-value with cov", "stars_no_cov", "stars_with_cov")] # From the column names of table 15 (colnames(table15)), delete (!) the names in the list: "p-value no cov", "p-value with cov", "stars_no_cov", "stars_with_cov".
+
+# Flip columns to rows and rows to columns.
+table15 <- as.data.frame(t(table15)) # The t() function transposes the dataframe so that rows become columns and columns become rows.
+
+# Replace all NAs in the table with a blank space.
+table15[] <- apply(table15, 2, function(x) ifelse(str_detect(x, "NA"), " ",  x)) # For table15, apply the function ifelse(str_detect(x, "NA"), " ",  x) across columns (2). The function detects if an NA value is present, and replaces it with a blank space " ". If an NA value is not present, then the original value is kept (x). To keep table15 as a dataframe, save this change as table15[].
+
+# Rename rows.
+rownames(table15) <- c("Treatment", "  ", "Total Engagement", " ", "AIC", "N")
+
+# Rename columns.
+colnames(table15) = c("Poisson", "Poisson With Covariate", "Negative Binomial", "Negative Binomial With Covariate")
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table15)
+```
+
+
+

@@ -1,0 +1,59 @@
+---
+title: "SI.Section.11"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "LIWC_scores" which contains LIWC scores for all participants.
+LIWC_scores <- read_csv('../Data/LIWC_scores_new.csv')
+```
+
+# FORMAT DATA.
+```{r FORMAT DATA}
+# Subset LIWC_scores to contain only participants who were in the control or treatment condition (excluding pure controls).
+LIWC_scores <- subset(LIWC_scores, condition != "pure_control")
+
+# Create classifier for posts/comments.
+LIWC_scores <- LIWC_scores %>% 
+  mutate(post_or_comment = parentPost == "N/A") # If a score relates to a post, then there is no parent post (parentPost == "N/A"). Assign a TRUE value. If a score relates to a comment, then there is a parent post. Assign a FALSE value.
+```
+
+# RUN MODEL.
+```{r RUN MODEL}
+# Run a multilevel model using the lmerTest::lmer function. The variable of interest is emotion. post_or_comment is a fixed intercept for whether a message is a comment or a post. condition is also a fixed intercept for whether a participant was in the treatment or control condition. (1 | participantCode) indicates a random intercept for each participant. Save the model as "LIWC_analysis".
+LIWC_analysis <- lmerTest::lmer(emotion ~ post_or_comment + condition + (1 | participantCode), data = LIWC_scores)
+
+# Save a summary of LIWC_analysis as "LIWC_analysis_summary".
+LIWC_analysis_summary <- summary(LIWC_analysis)
+```
+
+# MODEL RESULTS.
+```{r MODEL RESULTS}
+# Beta estimate.
+print(round(LIWC_analysis_summary$coefficients[,"Estimate"][3], 2)) # Round to two decimal places.
+
+# T-value.
+print(round(LIWC_analysis_summary$coefficients[,"t value"][3], 2)) # Round to two decimal places.
+
+# Degrees of freedom.
+print(round(LIWC_analysis_summary$coefficients[,"df"][3], 2)) # Round to two decimal places.
+
+# P-value.
+print(round(LIWC_analysis_summary$coefficients[,"Pr(>|t|)"][3], 3)) # Round to three decimal places.
+```
+

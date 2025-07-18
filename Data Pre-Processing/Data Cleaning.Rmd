@@ -1,0 +1,693 @@
+---
+title: "Data Cleaning"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES. 
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# INTAKE SURVEY DATA CLEANING.
+```{r INTAKE SURVEY DATA CLEANING}
+# Read in intake survey data. 
+intake <- read_csv('../Data/intake_anon.csv')
+
+# Some participants experienced issues when logging onto our research application and were given new invitation codes. Thus, the invitation code associated with their intake survey response is not equivalent to their invitation code in the remaining data. Replace their intake invitation codes to align with the new code they were given.
+intake <- intake %>%
+  mutate(participant_code = case_when(
+    participant_code == 'A4WQKM' ~ 'VATZ46', # If A4WQKM is detected, replace with VATZ46.
+    participant_code == 'E24DEX' ~ 'AVX9QE', # If E24DEX is detected, replace with AVX9QE.
+    participant_code == '7B3VZQ' ~ 'YWTGUB', # If 7B3VZQ is detected, replace with YWTGUB.
+    participant_code == '4RY787' ~ 'ZWTG94', # If 4RY787 is detected, replace with ZWTG94.
+    participant_code == 'ARGHPV' ~ 'TPZZQA', # If ARGHPV is detected, replace with TPZZQA.
+    participant_code == 'BM3KF2' ~ 'VQWK3M', # If BM3KF2 is detected, replace with VQWK3M.
+    participant_code == 'ZFYWAV' ~ 'KB39HV', # If ZFYWAV is detected, replace with KB39HV.
+    participant_code == 'CC4ETK' ~ 'VNPHMU', # If CC4ETK is detected, replace with VNPHMU.
+    participant_code == 'A6466K' ~ 'ZN3EYY', # If A6466K is detected, replace with ZN3EYY.
+    participant_code == 'DV36YU' ~ 'UGED4M', # If DV36YU is detected, replace with UGED4M.
+    participant_code == 'CM1XYT' ~ '223VA1', # If CM1XYT is detected, replace with 223VA1.
+    .default = participant_code)) # If none of the above cases are detected, default to the participant_code value that is already assigned.
+
+# Reformat the participant codes, so that they are all in lowercase letters.
+intake <- intake %>%
+  mutate(participant_code = str_to_lower(participant_code))
+
+# Create new column "race_new" which reformats some participant responses about race.
+intake <- intake %>%
+  mutate(race_new = case_when(
+      race == 'Hispanic,White' ~ 'Hispanic', # When 'Hispanic,White' is detected, replace with 'Hispanic'.
+      race == 'Something else' ~ 'Mixed/other', # When 'Something else' is detected, replace with 'Mixed/other'.
+      str_count(race, ',') > 0 ~ 'Mixed/other', # When participants selected multiple response options for race (e.g., White, Something else), replace with 'Mixed/other'.
+      .default = race)) # If none of the above cases are detected, default to the race value that is already selected.
+
+# Create new column "educ_new" which reformats participant responses about their educational background.
+# Further explanation: participants saw and responded to one of 9 instances of the same education question in Qualtrics (to handle randomly assigning one of many possible participation codes). This code collapses the 9 columns corresponding to those 9 questions into 1.
+intake<- intake %>% 
+  unite("educ_new", contains("educ_"), na.rm=TRUE) %>% # Select all columns that contain 'educ_', merge all columns into one column called 'educ_new' and remove NA values.
+  mutate(educ_new = na_if(educ_new, "")) # Some participants did not respond at all, so they have an empty value in educ_new. Replace this empty value with 'NA'.
+
+# Convert self-reported usage of various social media platforms from a string format to a quantitative score, in which more self-reported usage for each platform corresponds to greater numbers. NOTE: Participants reporting any usage of JiveHive (a fake social media platform) were dropped from the dataset.
+intake <- intake %>%
+  mutate(across(.cols = starts_with('platforms_'), # Select columns that start with 'platforms_' which include Facebook, Instagram, X, Tiktok, Truth, and JiveHive (fictional social media platform).
+                .fns = 
+                  ~case_match(.,
+                    'A lot' ~ 2, # If a participant responded 'A lot', then replace with the number 2.
+                    'Some' ~ 1, # If a participant responded 'Some', then replace with the number 1.
+                    'Not at all' ~ 0, # If a participant responded 'Not at all', then replace with the number 0.
+                    .default = NA))) # If none of the above cases are detected, default to an NA value.
+
+# Create new column "social_media_sum" which adds up participant social media platform usage responses.
+intake <- intake %>%
+  rowwise() %>% # Calculate sum for each row (1 row = 1 participant).
+  mutate(social_media_sum = sum(across(.cols = starts_with('platforms_')), na.rm = TRUE)) # Sum participant responses for all columns that start with 'platforms_' which include facebook, instagram, x, tiktok, truth, and jive (fake social media platform) usage. Remove NAs. 
+
+# Create new column "social_media_high" which classifies participants as high (or low) social media users.
+intake <- intake %>% 
+  mutate(social_media_high  = (social_media_sum >= 5)) # If a participant has a social media usage sum greater than or equal to five, then they are classified as high/frequent social media users and are assigned the value TRUE. If a participant has a social media usage sum less than 5, then they are classified as low/infrequent social media users, and are assigned the value FALSE.
+
+# Create new variable, "pid7", which contains a participant's political identity based on their partisan affiliation (pid3 = Democrat, Republican, Independent, Other) and two potential follow-up questions (pid_strong = Strong, Not strong; pid_lean = Democrat, Republican, True Independent)". 
+
+
+### intake <- intake %>% 
+###   mutate(pid7 = case_when(
+###     # If the participant identifies as Democrat...
+###     
+###     str_detect(pid3,"Democrat") & str_detect(pid_strong, "Strong") #...and identifies as a strong Democrat...
+###     ~ "Strong Democrat", #...then classify the participant as a "Strong Democrat".
+###     
+###     str_detect(pid3,"Democrat") & str_detect(pid_strong, "Not") #...and does not identify as a strong Democrat...
+###     ~ "Weak Democrat", #...then classify the participant as a "Weak Democrat".
+###     
+###     # If the participant identifies as Independent...
+###     
+###     str_detect(pid3,"Independent") & str_detect(pid_lean, "Democratic") #...and leans towards Democrats...
+###     ~ "Lean Democrat", #...then classify the participant as a "Lean Democrat".
+###     
+###     str_detect(pid3,"Independent") & str_detect(pid_lean, "Neither") #...and leans towards neither Democrats or Republicans...
+###     ~ "Pure Independent", #...then classify the participant as a "Pure Independent".
+###     
+###     str_detect(pid3,"Independent") & str_detect(pid_lean, "Republican") #...and leans towards Republicans...
+###     ~ "Lean Republican", #...then classify the participant as a "Lean Republican".
+###     
+###     # If the participant identifies as Other....
+###     
+###     str_detect(pid3,"Other") & str_detect(pid_lean, "Democratic") #...and leans towards Democrats...
+###     ~ "Lean Democrat", #...then classify the participant as a "Lean Democrat".
+###     
+###     str_detect(pid3,"Other") & str_detect(pid_lean, "Neither") #...and leans towards neither Democrats or Republicans...
+###     ~ "Pure Independent", #...then classify the participant as a "Pure Independent".
+###     
+###     str_detect(pid3,"Other") & str_detect(pid_lean, "Republican") #...and leans towards Republicans...
+###     ~ "Lean Republican", #...then classify the participant as a "Lean Republican".
+###     
+###     # If the participant identifies as Republican...
+###     
+###     str_detect(pid3,"Republican") & str_detect(pid_strong, "Strong") #...and identifies as a strong Republican...
+###     ~ "Strong Republican", #...then classify the participant as a "Strong Republican".
+###     
+###     str_detect(pid3,"Republican") & str_detect(pid_strong, "Not") #...and does not identify as a strong Republican...
+###     ~ "Weak Republican", #...then classify the participant as a "Weak Republican".
+###     
+###     # If none of the above cases are detected...
+###   
+###     .default = NA)) #...then assign an NA value.
+
+
+# use this format to precompute intermediate variables without needing to save variables
+intake$pid7 <- intake %>% 
+  mutate(
+    is_dem = grepl("Democrat", pid3),   
+    # Indicator for if participant identifies as Democrat
+    is_rep = grepl("Republican", pid3),  
+    # Indicator for if participant identifies as Republican
+    is_indep = grepl("Independent", pid3),  
+    # Indicator for if participant identifies as Independent
+    is_other = grepl("Other", pid3),  
+    # Indicator for if participant identifies as Other
+    strong = grepl("Strong", pid_strong),  
+    # Indicator for if participant identifies as Strong for chosen party
+    weak   = grepl("Not", pid_strong),  
+    # Indicator for if participant identifies as Not Strong for chosen party
+    lean_dem   = grepl("Democratic", pid_lean),  
+    # Indicator for if participant leands Democratic
+    lean_rep   = grepl("Republican", pid_lean),  
+    # Indicator for if participant leans Republican
+    lean_neither = grepl("Neither", pid_lean)  
+    # Indicator for if participant leans Neither way
+  ) %>%
+  mutate(pid7 = # if participant is a democrat and has a strong identity, classify as a strong democrat
+           ifelse(is_dem & strong, "Strong Democrat", 
+                # if participant is a democrat and has a weak identity, classify as a weak democrat
+           ifelse(is_dem & weak, "Weak Democrat",
+                # if participant is an independent and leans democrat, classify as lean democrat
+           ifelse(is_indep & lean_dem, "Lean Democrat",
+                # if participant is an independent and leans neither, classify as pure independent
+           ifelse(is_indep & lean_neither, "Pure Independent",
+                # if participant is an independent and leans republican, classify as lean republican
+           ifelse(is_indep & lean_rep, "Lean Republican",
+                # if participant is neither but still leans democrat, classify as lean democrat
+           ifelse(is_other & lean_dem, "Lean Democrat",
+                # if participant is neither and leans neither way, classify as pure independent
+           ifelse(is_other & lean_neither, "Pure Independent",
+                # if participant is neither and leans republican, classify as lean republican
+           ifelse(is_other & lean_rep, "Lean Republican",
+                # if participant is republican and has a strong identity, classify as a strong republican
+           ifelse(is_rep & strong, "Strong Republican",
+                # if participant is a republican and has a weak identity, classify as weak republican
+                # if participant is none of these, assign NA
+           ifelse(is_rep & weak, "Weak Republican", NA)
+                )))))))))) %>%
+  pull(pid7)
+
+```
+
+# PRE-TREATMENT SURVEY DATA CLEANING.
+```{r PRE-TREATMENT SURVEY DATA CLEANING}
+# Read in pre-treatment survey data.
+pretreat <- read_csv('../Data/pre_anon.csv') 
+
+# Create new column "treatment" which classifies participants as being part of (or not part of) a treatment group.
+pretreat <- pretreat %>%
+  mutate(treatment = str_ends(treatment_arm, 'treat')) # The column treatment_arm contains a shorthand for the experimental group the participant was assigned to. If the value within the column ends in 'treat', then the participant was in a treatment group, and a TRUE value is assigned to the treatment column. If not, a FALSE value is assigned. 
+
+# Convert intellectual humility responses from qualitative character values to numeric.
+# All of the intellectual humility questions asked are in the same direction
+pretreat <- pretreat %>%
+  mutate(across(contains('_ih_'), # Select columns that contain '_ih_' which include the 6 intellectual humility measures.
+                .fns = ~case_match(.,
+                             'Not at all well'~ 0, # If a participant responded 'Not at all well', then replace with the number 0.
+                             'Not too well'~ 1, # If a participant responded 'Not too well', then replace with the number 1.
+                             'Somewhat well'~ 2, # If a participant responded 'Somewhat well', then replace with the number 2.
+                             'Very well'~ 3, # If a participant responded 'Very well', then replace with the number 3.
+                             'Extremely well'~ 4))) # If a participant responded 'Extremely well', then replace with the number 4.
+
+# Create new column "pre_ih" which adds up each participant's pretreatment intellectual humility responses.
+pretreat <- pretreat %>%
+  rowwise() %>% # Calculate sum for each row (1 row = 1 participant).
+  mutate(pre_ih = sum(across(.cols = starts_with('pre_ih_')), na.rm = TRUE)) # Sum participant responses for all columns that start with 'pre_ih_' which include the 6 intellectual humility measures. Leave observations with any missing IH items to be NA. 
+
+# Create new column "pre_ih_binary" which indicates if a participant has high or low intellectual humility.
+pretreat <- pretreat %>%
+  rowwise() %>% # Calculate for each row (1 row = 1 participant).
+  mutate(pre_ih_binary = pre_ih >= 18) # Assigns a TRUE value if a participant's intellectual humility score is greater than or equal to 18, and a FALSE value is assigned if a participant's intellectual humility score is less than 18.
+ 
+# Convert responses about policy attitudes, currently in a string format, to a quantitative score of extremity. Extremity is measured as distance from the scales' midpoints. See section 2.1 of the supplementary information for more details.
+pretreat <- pretreat %>%
+   mutate(across(contains('_policy_'), # Select columns that contain '_policy_' which include the two policy questions: imm (immigration) and gc (gun control).
+                .fns = ~case_match(., 
+                                  'Strongly agree' ~ 3,  # If a participant responded 'Strongly agree', then replace with the number 3.
+                                  'Agree' ~ 2, # If a participant responded 'Agree', then replace with the number 2.
+                                  'Somewhat agree' ~ 1, # If a participant responded 'Somewhat agree', then replace with the number 1.
+                                  'Neither agree nor disagree' ~ 0, # If a participant responded 'Neither agree nor disagree', then replace with the number 0.
+                                  'Somewhat disagree' ~ 1, # If a participant responded 'Disagree', then replace with the number 1.
+                                  'Disagree' ~ 2, # If a participant responded 'Somewhat disagree', then replace with the number 2.
+                                  'Strongly disagree' ~ 3))) # If a participant responded 'Strongly disagree', then replace with the number 3.
+
+# Create new column "extremity_pre" which contains a participant's policy response that corresponds with the policy issue discussed on their newsfeed--which was randomly assigned.
+pretreat <- pretreat %>%
+  mutate(extremity_pre = case_when(
+    str_detect(treatment_arm, 'gc') ~ pre_policy_gc, # If a participant was in the gc (gun control) experimental group, then select for their response on the gun control policy question.
+    str_detect(treatment_arm, 'imm') ~ pre_policy_imm)) # If a participant was in the imm (immigration) experimental group, then select for their response on the immigration policy question.
+
+# Create two new columns, "pre_policy_gc_binary" and "pre_policy_imm_binary" which contain a TRUE value if the corresponding policy rating was greater than or equal to 1, and a FALSE value if the policy rating was less than 1.
+pretreat <- pretreat %>%
+  mutate(pre_policy_gc_binary = (pre_policy_gc > 1), # If the rating is greater than 1, assign TRUE, otherwise assign FALSE.
+         pre_policy_imm_binary = (pre_policy_imm > 1)) # If the rating is greater than 1, assign TRUE, otherwise assign FALSE.
+```
+
+# POST-TREATMENT SURVEY DATA CLEANING.
+```{r POST-TREATMENT SURVEY DATA CLEANING}
+# Read in post-treatment survey data.
+posttreat <- read_csv('../Data/post_anon.csv')
+
+##########PANAS##########
+
+# Convert PANAS responses from a string format to a quantitative score, in which more reported experience of an emotion corresponds to greater numbers.
+posttreat <- posttreat %>%
+  mutate(across(starts_with('panas_'), # Select columns that start with 'panas_' which are the 10 PANAS measures.
+                .fns = ~case_match(.,
+                             'Very slightly or not at all' ~ 0, # If a participant responded 'Very slightly or not at all', then replace with the number 0.
+                             'A little'~ 1, # If a participant responded 'A little', then replace with the number 1.
+                             'Moderately'~ 2, # If a participant responded 'Moderately', then replace with the number 2.
+                             'Quite a bit'~ 3, # If a participant responded 'Quite a bit', then replace with the number 3.
+                             'Extremely'~ 4, # If a participant responded 'Extremely', then replace with the number 4.
+                             .default = NA))) # If none of the above cases are detected, default to the assigning an NA value.
+
+# Create new column "panas_neg" which contains the sum of a participant's negative affect PANAS responses.
+posttreat <- posttreat %>%
+  rowwise() %>% # Calculate sum for each row (1 row = 1 participant).
+  mutate(panas_neg = sum(across(.cols = contains(c('hostile', 'ashamed', 'upset', 'afraid', 'nervous'))), na.rm = TRUE)) # Sum participant ratings for the five negative affect items.
+
+# Create new column "panas_pos" which contains the sum of a participant's positive affect PANAS responses.
+posttreat <- posttreat %>%
+  rowwise() %>% # Calculate sum for each row (1 row = 1 participant).
+  mutate(panas_pos = sum(across(.cols = contains(c('active', 'attentive', 'alert', 'determined', 'inspired'))), na.rm = TRUE)) # Sum participant ratings for the five positive affect items.
+
+# Create new column "panas" which contains the difference between a participant's positive and negative affect sums.
+posttreat <- posttreat %>%
+  mutate(panas = panas_pos - panas_neg) # Subtract positive and negative affect sums.
+
+##########INTELLECTUAL HUMILITY##########
+
+# Convert self-reported intellectual humility from a string format to a quantitative score, in which more self-reported intellectual humility corresponds to greater numbers. No items in our battery were reverse-coded.
+posttreat <- posttreat %>%
+  mutate(across(contains('_ih_'), # Select columns that contain '_ih_' which include the 6 intellectual humility measures.
+                .fns = 
+                  ~case_match(.,
+                             'Not at all well'~ 0, # If a participant responded 'Not at all well', then replace with the number 0.
+                             'Not too well'~ 1, # If a participant responded 'Not too well', then replace with the number 1.
+                             'Somewhat well'~ 2, # If a participant responded 'Somewhat well', then replace with the number 2.
+                             'Very well'~ 3, # If a participant responded 'Very well', then replace with the number 3.
+                             'Extremely well'~ 4))) # If a participant responded 'Extremely well', then replace with the number 4.
+
+# Create a new variable, "post_ih", which equals the sum of participant's individual intellectual humility scores to create a single index. Greater scores on this index indicate a greater degree of self-reported intellectual humility.
+posttreat <- posttreat %>%
+  rowwise() %>% # Calculate sum for each row (1 row = 1 participant).
+  mutate(post_ih = sum(across(.cols = starts_with('post_ih_')), na.rm = TRUE)) # Sum participant responses for all columns that start with 'post_ih_' which include the 6 intellectual humility measures. Remove NAs. 
+
+##########PARTICIPANT EXPERIENCE##########
+
+# Convert self-reported likelihood of using the research platform in the future from a string format to a quantitative score, in which being more likely to use the platform corresponds to greater numbers.           
+posttreat <- posttreat %>%
+  mutate(future_use_numeric = case_match(future_use, # Select the column 'future_use' which contains the responses.
+                                   'Very unlikely' ~ 1, # If a participant responded 'Very unlikely', then replace with the number 1.
+                                   'Somewhat unlikely' ~ 2, # If a participant responded 'Somewhat unlikely', then replace with the number 2.
+                                   'Neither unlikely nor likely' ~ 3, # If a participant responded 'Neither unlikely nor likely', then replace with the number 3.
+                                   'Somewhat likely' ~ 4, # If a participant responded 'Somewhat likely', then replace with the number 4.
+                                   'Very likely' ~ 5, # If a participant responded 'Very likely', then replace with the number 5.
+                                   NA ~ NA)) # If a participant responded 'NA', then keep the NA.
+
+# Convert the reported degree to which the research platform was "Engaging" from a string format to a quantitative score, in which viewing the platform as more engaging corresponds to lesser numbers. Note that this is reverse-coded in comparison to describing the platform as "Toxic" or "Exhausting", since "Engaging" has a positive valence.
+posttreat <- posttreat %>%
+  mutate(desc_platform_engaging = case_match(desc_platform_engaging, # Select the column 'desc_platform_engaging' which contains the responses.
+            'Not at all' ~ 5, # If a participant responded 'Not at all', then replace with the number 5.
+            'Very little' ~ 4, # If a participant responded 'Very little', then replace with the number 4.
+            'Some' ~ 3, # If a participant responded 'Some', then replace with the number 3.
+            'Quite a bit' ~ 2, # If a participant responded 'Quite a bit', then replace with the number 2.
+            'A great deal' ~ 1, # If a participant responded 'A great deal', then replace with the number 1.
+            NA ~ NA)) # If a participant responded 'NA', then keep the NA.
+
+# Convert the reported degree to which the research platform was "Toxic" from a string format to a quantitative score, in which viewing the platform as more toxic corresponds to greater numbers.
+posttreat <- posttreat %>%
+  mutate(desc_platform_toxic = case_match(desc_platform_toxic, # Select the column 'desc_platform_toxic' which contains the responses.
+            'Not at all' ~ 1, # If a participant responded 'Not at all', then replace with the number 1.
+            'Very little' ~ 2, # If a participant responded 'Very little', then replace with the number 2.
+            'Some' ~ 3, # If a participant responded 'Some', then replace with the number 3.
+            'Quite a bit' ~ 4, # If a participant responded 'Quite a bit', then replace with the number 4.
+            'A great deal' ~ 5, # If a participant responded 'A great deal', then replace with the number 5.
+            NA ~ NA)) # If a participant responded 'NA', then keep the NA.
+
+# Convert the reported degree to which the research platform was "Exhausting" from a string format to a quantitative score, in which viewing the platform as more exhausting corresponds to greater numbers.
+posttreat <- posttreat %>%
+  mutate(desc_platform_exhausting = case_match(desc_platform_exhausting, # Select the column 'desc_platform_exhausting' which contains the responses.
+            'Not at all' ~ 1, # If a participant responded 'Not at all', then replace with the number 1.
+            'Very little' ~ 2, # If a participant responded 'Very little', then replace with the number 2.
+            'Some' ~ 3, # If a participant responded 'Some', then replace with the number 3.
+            'Quite a bit' ~ 4, # If a participant responded 'Quite a bit', then replace with the number 4.
+            'A great deal' ~ 5, # If a participant responded 'A great deal', then replace with the number 5.
+            NA ~ NA)) # If a participant responded 'NA', then keep the NA.
+
+# Create a new index called "platforms" by meaning each participant's scores for the degree to which they viewed the platform as "Engaging", "Toxic", and "Exhausting". A higher score on this index suggests that the participant viewed the research platform more negatively---less engaging, more toxic, and more exhausting.
+posttreat <- posttreat %>%
+  rowwise() %>% # Calculate mean for each row (1 row = 1 participant).
+  mutate(platforms = mean(c(desc_platform_engaging, desc_platform_toxic, desc_platform_exhausting), na.rm = TRUE))
+
+# Convert reported degree to which other users on the research platform were "Polite" from a string format to a quantitative score, in which viewing the other users as more polite corresponds to greater numbers.
+posttreat <- posttreat %>%
+  mutate(desc_users_polite = case_match(desc_users_polite, # Select the column 'desc_users_polite' which contains the responses.
+            'Not at all' ~ 5, # If a participant responded 'Not at all', then replace with the number 5.
+            'Very little' ~ 4, # If a participant responded 'Very little', then replace with the number 4.
+            'Some' ~ 3, # If a participant responded 'Some', then replace with the number 3.
+            'Quite a bit' ~ 2, # If a participant responded 'Quite a bit', then replace with the number 2.
+            'A great deal' ~ 1, # If a participant responded 'A great deal', then replace with the number 1.
+            NA ~ NA)) # If a participant responded 'NA', then keep the NA.
+
+# Convert reported degree to which other users on the research platform were "Aggressive" from a string format to a quantitative score, in which viewing the other users as more aggressive corresponds to lesser numbers. Note that this is reverse coded relative to "Polite" and "Tolerant", since it has the opposite valence.
+posttreat <- posttreat %>%
+  mutate(desc_users_aggressive = case_match(desc_users_aggressive, # Select the column 'desc_users_aggressive' which contains the responses.
+            'Not at all' ~ 1, # If a participant responded 'Not at all', then replace with the number 1.
+            'Very little' ~ 2, # If a participant responded 'Very little', then replace with the number 2.
+            'Some' ~ 3, # If a participant responded 'Some', then replace with the number 3.
+            'Quite a bit' ~ 4, # If a participant responded 'Quite a bit', then replace with the number 4.
+            'A great deal' ~ 5, # If a participant responded 'A great deal', then replace with the number 5.
+            NA ~ NA)) # If a participant responded 'NA', then keep the NA
+
+# Convert reported degree to which other users on the research platform were "Tolerant" from a string format to a quantitative score, in which viewing the other users as more tolerant corresponds to greater numbers. 
+posttreat <- posttreat %>%
+  mutate(desc_users_tolerant = case_match(desc_users_tolerant, # Select the column 'desc_users_tolerant' which contains the responses.
+            'Not at all' ~ 5, # If a participant responded 'Not at all', then replace with the number 5.
+            'Very little' ~ 4, # If a participant responded 'Very little', then replace with the number 4.
+            'Some' ~ 3, # If a participant responded 'Some', then replace with the number 3.
+            'Quite a bit' ~ 2, # If a participant responded 'Quite a bit', then replace with the number 2.
+            'A great deal' ~ 1, # If a participant responded 'A great deal', then replace with the number 1.
+            NA ~ NA)) # If a participant responded 'NA', then keep the NA.
+
+# Create a new index called "users" by meaning each participant's scores for the degree to which they viewed the platform as "Polite", "Aggressive", and "Tolerant". A higher score on this index suggests that the participant viewed the other users more positively--as more polite, more tolerant, and less aggressive.
+posttreat <- posttreat %>%
+  rowwise() %>% # Calculate mean for each row (1 row = 1 participant).
+  mutate(users = mean(c(desc_users_polite, desc_users_aggressive, desc_users_tolerant), na.rm = TRUE))
+
+# Create a new index called "users_b" by summing each participant's scores for the degree to which they viewed the platform as "Polite" and "Tolerant". In other words, this is an index similar to "users" but excludes the use of "Aggressive". A greater score on this index indicates that the participant perceived the other users as having more positive characteristics.
+posttreat <- posttreat %>%
+  rowwise() %>% # Calculate sum for each row (1 row = 1 participant).
+  mutate(users_b = mean(c(desc_users_polite, desc_users_tolerant), na.rm = TRUE))
+
+# Convert participants' reported degree of comfort sharing opinions on the research platform from a string format to a quantitative score, in which reporting that one feels more comfortable corresponds to greater numbers.
+posttreat <- posttreat %>%
+  mutate(comfort_sharing = case_match(comfort_sharing, # Select the column 'comfort_sharing' which contains the ratings.
+                              "Not at all comfortable" ~ 1, # If a participant responded 'Not at all comfortable', then replace with the number 1.
+                               "Slightly comfortable" ~ 2, # If a participant responded 'Slightly comfortable', then replace with the number 2.
+                               "Moderately comfortable" ~ 3, # If a participant responded 'Moderately comfortable', then replace with the number 3.
+                               "Very comfortable" ~ 4, # If a participant responded 'Very comfortable', then replace with the number 4.
+                               "Extremely comfortable" ~ 5, # If a participant responded 'Extremely comfortable', then replace with the number 5.
+                               NA ~ NA)) # If a participant responded 'NA', then keep the NA.
+
+##########POLITICAL/POLICY VIEWS##########
+
+# Convert self-reported policy attitudes on immigration and gun control from a string format to a quantitative score, in which reporting more "extreme attitudes" (i.e., farther from the scale midpoint) corresponds to greater numbers. See the Supplemental Information for exact question wording.
+posttreat <- posttreat %>%
+    mutate(across(contains('_policy_'), # Select columns that contain '_policy_' which include the two policy questions: imm (immigration) and gc (gun control).
+                .fns = ~case_match(.,
+                                  'Strongly agree' ~ 3, # If a participant responded 'Strongly agree', then replace with the number 3.
+                                  'Agree' ~ 2, # If a participant responded 'Agree', then replace with the number 2.
+                                  'Somewhat agree' ~ 1, # If a participant responded 'Somewhat agree', then replace with the number 1.
+                                  'Neither agree nor disagree' ~ 0, # If a participant responded 'Neither agree nor disagree', then replace with the number 0.
+                                  'Somewhat disagree' ~ 1, # If a participant responded 'Somewhat disagree', then replace with the number 1.
+                                  'Disagree' ~ 2, # If a participant responded 'Disagree', then replace with the number 2.
+                                  'Strongly disagree' ~ 3))) # If a participant responded 'Strongly disagree', then replace with the number 3.
+```
+
+# DROP PARTICIPANTS FROM INTAKE, PRE-TREATMENT, AND POST-TREATMENT DATAFRAMES.
+```{r DROP PARTICIPANTS FROM INTAKE, PRE-TREATMENT, AND POST-TREATMENT DATAFRAMES}
+# Drop participants from the intake, pre-treatment, and post-treatment datasets who were associated with more than one post-treatment survey observation. See section XX of the supporting information for more information.
+# Participant 'drgqdt' was an internal test run prior to fielding the study.
+
+# Drop participants from intake which have a participant code contained in the list: 'a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc','drgqdt'.
+intake <- intake %>%
+  filter(!(participant_code %in% c('a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc','drgqdt')))
+
+# Drop participants from pretreat which have a participant code contained in the list: 'a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc','drgqdt'.
+pretreat <- pretreat %>%
+  filter(!(participant_code %in% c('a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc','drgqdt')))
+
+# Drop participants from posttreat which have a participant code contained in the list: 'a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc','drgqdt'.
+posttreat <- posttreat %>%
+  filter(!(participant_code %in% c('a43n36','a6punv','84z39x','9eemkf','7wgznu','xx43nc','drgqdt')))
+```
+
+# MERGE INTAKE, PRE-TREATMENT, AND POST-TREATMENT DATAFRAMES INTO A NEW DATAFRAME CALLED "SURVEY_DF"; SURVEY_DF DATA CLEANING.
+```{r MERGE INTAKE, PRE-TREATMENT, AND POST-TREATMENT DATAFRAMES INTO A NEW DATAFRAME CALLED "SURVEY_DF"; SURVEY_DF DATA CLEANING}
+# Join intake, pretreat, and posttreat data frames into a new dataframe called "survey_df".
+survey_df <- posttreat %>% # Select the posttreat dataframe.
+  inner_join(pretreat, by = 'participant_code', suffix = c('_post', '_pre')) %>% # Join the pretreat dataframe to the posttreat dataframe, matching by participant code. Any columns with duplicate names will have "_post" added to the name if previously contained in the posttreat dataframe, and "_pre" added to the name if previously contained in the pretreat dataframe.
+  inner_join(intake %>% filter(!is.na(participant_code)), # Join the intake dataframe to the combined pretreat/posttreat dataframe by matching on participant codes. Drop any rows that do not have a participant code.
+             by = 'participant_code')
+
+# Create column "condition" which contains the experimental condition (treatment, control, pure control) that participants were assigned to.
+survey_df <- survey_df %>%
+  mutate(condition = case_when(
+    str_ends(treatment_arm, 'pc') ~ 'pure_control', # If the column 'treatment_arm' contains the value 'pc', then assign the value 'pure_control' to the condition column.
+    str_ends(treatment_arm, 'treat') ~ 'treat', # If the column 'treatment_arm' contains the value 'treat', then assign the value 'treat' to the condition column.
+    str_detect(treatment_arm, 'control') ~ 'control', # If the column 'treatment_arm' contains the value 'control', then assign the value 'control' to the condition column.
+    .default = NA)) # If none of the above cases are detected, default to an NA value.
+
+##########INTELLECTUAL HUMILITY##########
+
+# Create column "delta_ih" which contains the change in ratings of self-reported intellectual humility between post- and pre-treatment.
+survey_df <- survey_df %>%
+  mutate(delta_ih = post_ih - pre_ih) # Subtract the pre-treatment rating from the post-treatment rating
+
+# Create columns "delta_ih_1", "delta_ih_2", "delta_ih_3", "delta_ih_4", "delta_ih_5", "delta_ih_6" which calculate the change in ratings of self-reported intellectual humility (between post-treatment and pre-treatment) for each index item.
+survey_df <- survey_df %>% 
+  mutate(delta_ih_1 = post_ih_1 - pre_ih_1) %>% 
+  mutate(delta_ih_2 = post_ih_2 - pre_ih_2) %>% 
+  mutate(delta_ih_3 = post_ih_3 - pre_ih_3) %>% 
+  mutate(delta_ih_4 = post_ih_4 - pre_ih_4) %>% 
+  mutate(delta_ih_5 = post_ih_5 - pre_ih_5) %>% 
+  mutate(delta_ih_6 = post_ih_6 - pre_ih_6) 
+
+##########AFFECTIVE POLARIZATION##########
+
+# Note: Both pre-treatment and post-treatment affective polarization are calculated here because they rely on a participant's partisan identity (pid7), which is collected during the intake survey.
+
+# Create column "pre_affective_polarization" which contains a participant's pre-treatment affective polarization rating (in-group thermometer rating - out-group thermometer rating).
+survey_df <- survey_df %>%
+  rowwise() %>% # Calculate difference for each row (1 row = 1 participant).
+  mutate(pre_affective_polarization = case_when( 
+    
+    # If the participant identifies as a Democrat...
+    
+    pid7 %in% c("Lean Democrat", "Weak Democrat", "Strong Democrat") & Party1 == "Democratic" #...and the first party they gave a thermometer rating for (Party1) was Democrat...
+    ~ pre_therm_1 - pre_therm_2, #...then subtract in-group rating (Democrat = pre_therm_1) - out-group rating (Republican = pre_therm_2) to get a pre-treatment affective polarization rating.
+    
+  
+    pid7 %in% c("Lean Democrat", "Weak Democrat", "Strong Democrat") & Party1 == "Republican" #...and the first party they gave a thermometer rating for (Party1) was Republican...
+    ~ pre_therm_2 - pre_therm_1,  #...then subtract in-group rating (Democrat = pre_therm_2) - out-group rating (Republican = pre_therm_1) to get a pre-treatment affective polarization rating.
+    
+    # If the participant identifies as a Republican...
+    
+    pid7 %in% c("Lean Republican", "Weak Republican", "Strong Republican") & Party1 == "Republican" #...and the first party they gave a thermometer rating for (Party1) was Republican...
+    ~ pre_therm_1 - pre_therm_2, #...then subtract in-group rating (Republican = pre_therm_1) - out-group rating (Democrat = pre_therm_2) to get a pre-treatment affective polarization rating.
+    
+    pid7 %in% c("Lean Republican", "Weak Republican", "Strong Republican") & Party1 == "Democratic" #..and the first party they gave a thermometer rating for  (Party1) was Democrat...
+    ~ pre_therm_2 - pre_therm_1, #...then subtract in-group rating (Republican = pre_therm_2) - out-group rating (Democrat = pre_therm_1) to get a pre-treatment affective polarization rating.
+    
+    # If none of the above cases are detected...
+    
+    TRUE ~ NA_real_)) #...then the participant identified as a "Pure Independent", and pre-treatment affective polarization rating = NA.
+    
+# Create column "post_affective_polarization" which contains a participant's post-treatment affective polarization rating (in-group thermometer rating - out-group thermometer rating).
+survey_df <- survey_df %>%
+  rowwise() %>%  # Calculate difference for each row (1 row = 1 participant).
+  mutate(post_affective_polarization = case_when(
+    
+    # If the participant identifies as a Democrat...
+    
+    pid7 %in% c("Lean Democrat", "Weak Democrat", "Strong Democrat") & Party1_post == "Democratic" #...and the first party they gave a thermometer rating for (Party1_post) was Democrat...
+    ~ post_therm_1 - post_therm_2, #...then subtract the in-group rating (Democrat = post_therm_1) - out-group rating (Republican = post_therm_2) to get a post-treatment affective polarization rating. 
+    
+    pid7 %in% c("Lean Democrat", "Weak Democrat", "Strong Democrat") & Party1_post == "Republican" #...and the first party they gave a thermometer rating for (Party1_post) was Republican...
+    ~ post_therm_2 - post_therm_1, #...then subtract the in-group rating (Democrat = post_therm_2) - out-group rating (Republican = post_therm_1) to get a post-treatment affective polarization rating. 
+    
+    # If the participant identifies as a Republican...
+    
+    pid7 %in% c("Lean Republican", "Weak Republican", "Strong Republican") & Party1_post == "Republican" #...and the first party they gave a thermometer rating for (Party1_post) was Republican...
+    ~ post_therm_1 - post_therm_2, #...then subtract the in-group rating (Republican = post_therm_1) - out-group rating (Democrat = post_therm_2) to get a post-treatment affective polarization rating. 
+    
+    pid7 %in% c("Lean Republican", "Weak Republican", "Strong Republican") & Party1_post == "Democratic" #...and the first party they gave a thermometer rating for (Party1_post) was Democrat...
+    ~ post_therm_2 - post_therm_1, #...then subtract the in-group rating (Republican = post_therm_2) - out-group rating (Democrat = post_therm_1) to get a post-treatment affective polarization rating. 
+    
+    # If none of the above cases are detected...
+    
+    TRUE ~ NA_real_)) #...then the participant identified as a "Pure independent", and post-treatment affective polarization = NA.
+
+
+
+
+# Create a new variable, "affective_polarization", which indicates the degree to which a participant's affective polarization increased between the pretreatment and posttreatment survey. Greater numbers indicate that the participant's affective polarization increased more. Negative numbers indicate that the participant's affective polarization decreased.
+survey_df <- survey_df %>%
+  rowwise() %>% # Calculate difference for each row (1 row = 1 participant).
+  mutate(affective_polarization = post_affective_polarization - pre_affective_polarization) # Subtract post-treatment affective polarization scores and pre-treatment affective polarization scores.
+
+##########POLICY VIEWS##########
+
+# Create column "extremity_post" which contains a participant's post-treatment policy response that corresponds with their experimental group.
+# Further explanation: extremity_pre was created prior to this in the pre-treatment data cleaning section. The reason why this variable is created at this point is because it depends both on the pre-treatment variable 'treatment_arm' and post-treatment variables 'post_policy_1' and 'post_policy_2'.
+survey_df <- survey_df %>%
+  mutate(extremity_post = case_when(
+    str_detect(treatment_arm, 'gc') ~ post_policy_1, # If a participant was in the gc (gun control) experimental group, then select for their response on the gun control policy question.
+    str_detect(treatment_arm, 'imm') ~ post_policy_2)) # If a participant was in the imm (immigration) experimental group, then select for their response on the immigration policy question.
+
+# Create variable "extremity_post_less_pre", equal to a participants' post-treatment policy extremity less their pre-treatment policy extremity. Positive values indicate that the participant became more extreme in their focal policy attitude between the pretreatment and posttreatment surveys. Negative values indicate that they become less extreme.
+survey_df <- survey_df %>%
+  mutate(extremity_post_less_pre = extremity_post - extremity_pre)
+
+##############################
+
+# Create column "mc_correct" which contains whether a participant passed or failed the manipulation check.
+survey_df <- survey_df %>%
+  mutate(mc_correct = case_when(
+    condition == "treat" & str_detect(manip_check, 'The degree to which users respectfully engage with and learn from differing opinions.') ~ 1, # If a participant in the treatment group matches this manipulation check response, they passed. Assign the value of 1.
+    condition == "control" & str_detect(manip_check, 'The degree to which the user is "popular", or the degree to which they are able to achieve "likes".') ~ 1, # If a participant in the control group matches this manipulation check response, they passed. Assign the value of 1.
+    condition == "pure_control" & str_detect(manip_check, 'There were no user badges on the platform') ~ 1, # If a participant in the pure control group matches this manipulation check response, they passed. Assign the value of 1.
+    .default = 0)) # If none of the above cases are detected, the participant failed the manipulation check. Assign the value of 0.
+```
+
+# PARTICIPANT APP ENGAGEMENT DATA CLEANING; MERGE WITH SURVEY_DF.
+```{r PARTICIPANT APP ENGAGEMENT DATA CLEANING; MERGE WITH SURVEY_DF}
+# Read in pre-planned intellectual humility posts texts and reformat into a vector.
+ih_posts_text <- read.csv("../Data/intellectual_humility_posts.csv") # Read csv.
+ih_posts_text <- ih_posts_text[,1] # Save the 1st column of the dataframe, containing the posts text, as a vector.
+
+# Read in participant data from their engagement on the app. This includes data about likes, dislikes, comments, and posts.
+app_engagement <- read_csv('../Data/participant_app_engagement.csv') # Read csv.
+
+# Match participants in app_engagement dataframe to those in survey_df.
+app_engagement <- app_engagement %>%
+  filter(participantCode %in% survey_df$participant_code) # Participant codes in app_engagement are included in the "participantCode" column, which matches the "participant_code" column in survey_df.
+
+# Create column "condition" which contains the experimental condition (treatment, control, pure control) that participants were assigned to.
+app_engagement <- app_engagement %>%
+  mutate(condition = case_when( 
+    str_ends(treatmentArm, 'pc') ~ 'pure_control', # If the column 'treatment_arm' contains the value 'pc', then assign the value 'pure_control' to the condition column.
+    str_ends(treatmentArm, 'treat') ~ 'treat', # If the column 'treatment_arm' contains the value 'treat', then assign the value 'treat' to the condition column.
+    str_detect(treatmentArm, 'control') ~ 'control', # If the column 'treatment_arm' contains the value 'control', then assign the value 'control' to the condition column.
+    .default = NA)) # If none of the above cases are detected, default to an NA value.
+
+# Create column "ih" which classifies if a post was an intellectual humility pre-planned (in the ih_posts_text vector) or not.
+app_engagement <- app_engagement %>%
+  mutate(ih = (staticContent == 1) & (postOrCommentText %in% ih_posts_text)) # Assigns a TRUE value if the post in the column "postOrCommentText" is from the pre-panned intellectual humility post list (ih_posts_text) AND if the post is static (meaning it was pre-populated). Otherwise, a FALSE value is assigned.
+
+##########GENERAL ENGAGEMENT##########
+
+app_engagement <- app_engagement %>%
+  group_by(participantCode) %>% # Identify participants by their participant code.
+  mutate(total_likes = sum(participantLiked == 1, na.rm=TRUE)) %>% # Create column "total_likes" which counts the number of posts liked by each participant.
+  mutate(total_dislikes = sum(participantDisliked == 1, na.rm=TRUE)) %>% # Create column "total_dislikes" which counts the number of posts liked by each participant.
+  mutate(this_is_a_post = userContent == 1 & is.na(parentPost)) %>% # Create column "this_is_a_post" which classifies if text written by a participant is a post.
+  mutate(this_is_a_comment = userContent == 1 & !is.na(parentPost)) %>% # Create column "this_is_a_comment" which classifies if text written by a participant is a comment.
+  mutate(total_words_written = sum(text_length[userContent == 1])) %>% # Create column "total_words_written" which calculates the total amount of words written by a participant.
+  mutate(total_words_in_posts = sum(text_length[this_is_a_post== TRUE])) %>% # Create column "total_words_in_posts" which calculates the sum of words written by each participant for posts.
+  mutate(total_words_in_comments = sum(text_length[this_is_a_comment== TRUE])) %>% # Create column "total_words_in_comments" which calculates the sum of words written by each participant.
+  mutate(num_comments = sum(this_is_a_comment== TRUE)) %>% # Create column "num_comments" which counts the number of comments made by each participant.
+  mutate(num_posts = sum(this_is_a_post== TRUE)) # Create column "num_posts" which counts the number of posts created by each participant.
+
+
+##########INTELLECTUAL HUMILITY ENGAGEMENT##########
+
+# Create vector "intellectual_humility_ids" containing a list of intellectual humility post/comment IDs.
+intellectual_humility_ids <- app_engagement$postOrCommentId[app_engagement$ih == TRUE] # Save the postOrCommentId if the text is an intellectual humility post (ih = TRUE).
+intellectual_humility_ids <- unique(intellectual_humility_ids) # Save only unique post/comment IDs.
+
+# Create dataframe "intellectual_humility_comments" which contains participant comments under intellectual humility posts.
+intellectual_humility_comments <- app_engagement %>% 
+  filter(userContent == 1) %>% # If a participant authored the text, then userContent = 1.
+  filter(parentPost %in% intellectual_humility_ids) # If the post is a comment, it will have an ID value in the column parentPost. Select for parentPost IDs that are contained in the ih_ids vector (this means it's a comment on an intellectual humility post).
+
+# Calculate the number of times each participant commented on an intellectually humble post.
+intellectual_humility_comments <- intellectual_humility_comments %>% 
+  group_by(participantCode) %>%  # Identify participants by their participant code.
+  summarise(num_ih_comments = n()) # For each participant, 1 row = 1 comment. Count the number of rows using the function n().
+
+# Create dataframe "intellectual_humility_engagement" which concerns participant engagement (likes, dislikes) with intellectual humility posts.
+intellectual_humility_engagement <- app_engagement %>%
+  filter(ih == TRUE) # Select data from intellectual humility posts.
+
+# Create a variable, "ih_likes", which is equal to the number of likes each participant gave to intellectually humble posts.
+intellectual_humility_engagement <- intellectual_humility_engagement %>% 
+  group_by(participantCode) %>% # Identify participants by their participant code.
+  mutate(ih_likes = sum(participantLiked == 1)) %>% # Create a variable, "ih_likes", which is equal to the number of likes each participant gave to intellectually humble posts.
+  mutate(proportion_ih_likes = ih_likes/total_likes) %>%# Create a variable, "proportion_ih_likes", which is equal to the proportion of each participant's likes that were given to intellectually humble posts.
+  mutate(ih_dislikes = sum(participantDisliked == 1)) %>% # Create a variable, "ih_dislikes", which is equal to the number of dislikes each participant gave to intellectually humble posts.
+  mutate(proportion_ih_dislikes = ih_dislikes/total_dislikes) # Create a variable, "proportion_ih_dislikes", which is equal to the proportion of each participant's dislikes that were given to intellectually humble posts.
+
+##########MERGE DATAFRAMES TOGETHER##########
+
+# Merge app_engagement dataframe with survey_df.
+survey_df <- survey_df %>% 
+  left_join(app_engagement %>% # Join the app_engagement dataframe to survey_df.
+              distinct(participantCode, .keep_all=TRUE) %>% # app_engagement contains multiple rows for each participant. However, the information we are interested in is the same in each row. Therefore, we only need to keep one row within the app_engagement dataframe per participant.
+              select(participantCode, total_likes, total_dislikes, total_words_written, total_words_in_posts, total_words_in_comments, num_comments, num_posts, ih_a_all), # Select the columns "participantCode", "total_likes", "total_dislikes", "total_words_written", "total_words_in_posts", "total_words_in_comments", "num_comments", "num_posts", "ih_a_all" to be joined to survey_df.
+              by = c('participant_code' = 'participantCode')) # Match rows by participant code ('participant_code' in survey_df, and 'participantCode' in app_engagement).
+  
+# Merge intellectual_humility_engagement dataframe with survey_df.
+survey_df <- survey_df %>% 
+  left_join(intellectual_humility_engagement %>% # Join the intellectual_humility_engagement dataframe to survey_df.
+              distinct(participantCode, .keep_all=TRUE) %>% # intellectual_humility_engagement contains multiple rows for each participant. However, the information we are interested in is the same in each row. Therefore, we only need to keep one row within the intellectual_humility_engagement dataframe per participant.
+              select(participantCode, ih_likes, ih_dislikes, proportion_ih_likes, proportion_ih_dislikes), # Select the columns "participantCode", "ih_likes", "ih_dislikes", "proportion_ih_likes", and "proportion_ih_dislikes" to be joined to survey_df.
+              by = c('participant_code' = 'participantCode')) # Match rows by participant code ('participant_code' in survey_df, and 'participantCode' in intellectual_humility_engagement).
+
+# Merge intellectual_humility_comments dataframe with survey_df.
+survey_df <- survey_df %>% 
+  left_join(intellectual_humility_comments %>% # Join the intellectual_humility_comments dataframe to survey_df.
+              distinct(participantCode, .keep_all=TRUE) %>% #intellectual_humility_comments contains multiple rows for each participant. However, the information we are interested in is the same in each row. Therefore, we only need to keep one row within the intellectual_humility_comments dataframe per participant.
+              select(participantCode, num_ih_comments), # Select the columns "participantCode", "num_ih_comments", to be joined to survey_df.
+              by = c('participant_code' = 'participantCode')) # Match rows by participant code ('participant_code' in survey_df, and 'participantCode' in intellectual_humility_comments).
+
+##########DATA FORMATTING##########
+
+# Replace NAs or NaNs for certain variables with 0.
+survey_df <- survey_df %>% 
+  mutate(total_likes = replace_na(total_likes, 0)) %>% # Replace NA values in the ih_likes column with 0.
+  mutate(total_dislikes = replace_na(total_dislikes, 0)) %>% # Replace NA values in the ih_likes column with 0.
+  mutate(total_words_written = replace_na(total_words_written, 0)) %>% # Replace NA values in the ih_likes column with 0.
+  mutate(total_words_in_posts = replace_na(total_words_in_posts, 0)) %>% # Replace NA values in the ih_likes column with 0.
+  mutate(total_words_in_comments = replace_na(total_words_in_comments, 0)) %>% # Replace NA values in the ih_likes column with 0.
+  mutate(num_comments = replace_na(num_comments, 0)) %>% # Replace NA values in the num_comments column with 0.
+  mutate(num_posts = replace_na(num_posts, 0)) %>% # Replace NA values in the num_comments column with 0.
+  mutate(ih_likes = replace_na(ih_likes, 0)) %>% # Replace NA values in the ih_likes column with 0.
+  mutate(ih_dislikes = replace_na(ih_dislikes, 0)) %>% # Replace NA values in the ih_dislikes column with 0.
+  mutate(num_ih_comments = replace_na(num_ih_comments, 0)) %>% # Replace NA values in the num_ih_comments column with 0.
+  mutate(proportion_ih_likes = coalesce(proportion_ih_likes, 0)) %>% # Replace NA and NaN values in the proportion_ih_likes column with 0.
+  mutate(proportion_ih_dislikes = coalesce(proportion_ih_dislikes, 0)) # Replace NA and NaN values in the proportion_ih_dislikes column with 0.
+
+# Create column "ih_engagement" which adds up the amount of times a participant interacted with an intellectual humility post (likes/dislikes/comments).
+survey_df <- survey_df %>%
+  mutate(ih_engagement = ih_likes + ih_dislikes + num_ih_comments) # Sum likes, dislikes, and comments made on intellectual humility posts.
+
+```
+
+# THIRD ORDER DATA CLEANING; MERGE WITH SURVEY_DF.
+```{r THIRD ORDER DATA CLEANING; MERGE WITH SURVEY_DF}
+# In the post-treatment survey, we asked participants about which posts out of a few pairs would receive the most likes on the research platform (see Supplementary Materials Section 14.1.3 for more details). Due to how the questions were coded in Qualtrics, we had to create a separate CSV file with usable information about how participants responded to these questions. Read in that csv. 
+third_order <- read_csv('../Data/third-order.csv')
+
+# Create new column "nas" which contains the amount of NA responses in each of the third order response columns. Remove participants who did not respond to any of the questions.
+third_order <- third_order %>% 
+  mutate(nas = is.na(third_order_A1) + is.na(third_order_A2) + is.na(third_order_B1) + is.na(third_order_B1)) %>% # Add up the amount of NA responses in each column.
+  filter(nas < 4)
+  
+# Merge third_order dataframe with survey_df.
+survey_df <- survey_df %>%
+  select(-starts_with('third_order')) %>% # Remove third_order data already existing in survey_df. It only contains NAs, hence why an additional csv needed to be loaded.
+  left_join(third_order, by = 'participant_code') # Join the third order dataframe with survey_df.
+
+# Create new column "third_order" which contains the total number of intellectually humble posts selected by each participant.
+survey_df <- survey_df %>%
+  rowwise() %>% # Calculate sum for each row (1 row = 1 participant).
+  mutate(third_order = ifelse(nas == 2, sum(across(starts_with('third_order')), na.rm = TRUE), NA)) # If a participant selected the intellectually humble post, they received a value of 1. Otherwise, they received a value of 0. If participants answered exactly two questions (nas == 2), sum across the four third_order columns to get the total number of selected intellectually humble posts for each participant. If participants did not answer exactly two questions, then assign an NA value.
+```
+
+# EXCLUDE PURE CONTROL GROUP.
+```{r EXCLUDE PURE CONTROL GROUP}
+# Exclude participants from the pure control group.
+# Further explanation: many analyses are conducted without the pure control group.
+survey_df_no_pure_control <- subset(survey_df, condition != "pure_control")
+```
+
+# EXPORT CLEANED DATA.
+```{r EXPORT CLEANED DATA}
+# Export a csv of the intake data frame. A csv file called "intake_cleaned.csv" will be saved to the Data folder.
+write.csv(intake, "../Data/intake_cleaned.csv")
+
+# Export a csv of the pretreat data frame. A csv file called "pretreat_cleaned.csv" will be saved to the Data folder.
+write.csv(pretreat, "../Data/pretreat_cleaned.csv")
+
+# Export a csv of the posttreat data frame. A csv file called "posttreat_cleaned.csv" will be saved to the Data folder.
+write.csv(posttreat, "../Data/posttreat_cleaned.csv")
+
+# Export a csv of the app_engagement data frame. A csv file called "app_engagement_cleaned.csv" will be saved to the Data folder.
+write.csv(app_engagement, "../Data/app_engagement_cleaned.csv")
+
+# Export a csv of the survey_df data frame. A csv file called "data_with_pure_control_cleaned.csv" will be saved to the Data folder.
+write.csv(survey_df, "../Data/data_with_pure_control_cleaned.csv")
+
+# Export a csv of the survey_df_no_pure_control data frame. A csv file called "data_cleaned.csv" will be saved to the Data folder.
+write.csv(survey_df_no_pure_control, "../Data/data_cleaned.csv")
+```
+
+# REMOVE EXTRA DATAFRAMES AND VALUES FROM ENVIRONMENT.
+```{r REMOVE EXTRA DATAFRAMES AND VALUES FROM ENVIRONMENT}
+# Remove extra dataframes and values from environment.
+# rm(list=ls())
+```
+

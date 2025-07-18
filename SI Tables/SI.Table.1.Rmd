@@ -1,0 +1,79 @@
+---
+title: "SI.Table.1"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# CALCULATE PROPORTIONS.
+```{r CALCULATE PROPORTIONS}
+# Create dataframe "participant_device" which contains the proportions of participants who use Apple iPhones and Android phones.
+participant_device <- data %>%
+  count(Variable = device) %>% # "device" is the column in data that contains this information. Count the number of participants who use each device.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of participants who use each device, and multiply by 100.
+
+# Create dataframe "participant_political_identity" which contains the proportions of participants who identify with each political identity.
+participant_political_identity <- data %>%
+  count(Variable = pid3) %>% # "pid3" is the column in data that contains this information. Count the number of participants who identify with each political identity.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of participants who identify with each political identity, and multiply by 100.
+
+# Create dataframe "participant_race" which contains the proportions of participants who identify with each race.
+participant_race <- data %>%
+  count(Variable = race_new) %>% # "race_new" is the column in data that contains this information. Count the the number of participants who identify with each race.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of participants who identify with each race, and multiply by 100.
+```
+
+# FORMAT TABLE.
+```{r FORMAT TABLE}
+# Add a subsection header "Apple (vs Android)" to participant_device.
+participant_device <- participant_device %>% 
+  add_row(Variable = "Apple (vs Android)", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+
+# Add a subsection header "Political ID (3 Point)" to participant_political_identity.
+participant_political_identity <- participant_political_identity %>% 
+  add_row(Variable = "Political ID (3 Point)", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+
+# Add a subsection header "Race" to participant_race.
+participant_race <- participant_race %>% 
+  add_row(Variable = "Race", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+
+# Bind participant_device, participant_political_identity, participant_race into one dataframe called "table1".
+table1 <- rbind(participant_device, participant_political_identity, participant_race) # Bind the rows of the dataframes.
+
+# Delete the column "n", which contains the count information for participants within each category.
+table1["n"] <- NULL
+
+# Round proportions to two decimal places.
+table1 <- table1 %>% 
+  mutate(proportion = round(proportion, 2))
+
+# Replace the NA values within the subsection title rows with blank spaces.
+table1 <- table1 %>% 
+  mutate(proportion = as.character(proportion)) %>% # Since a blank space " " is considered a character value, the column containing the NA values (proportion) first needs to be converted to a character column.
+  mutate(proportion = replace_na(proportion, " ")) # Replace NA values in proportion with a blank space " ".
+
+# Rename "proportion" column to "Proportion of participants".
+table1 <- table1 %>% 
+  rename(`Proportion of participants` = proportion) # Rename the column "proportion" to "Proportion of participants".
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table1)
+```

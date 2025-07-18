@@ -1,0 +1,271 @@
+---
+title: "SI.Figure.3"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+library(tidyverse)
+library(DiagrammeR)
+library(glue)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "intake" which contains cleaned participant intake survey data.
+intake <- read_csv('../Data/intake_cleaned.csv') # Read csv data file.
+```
+
+# CALCULATIONS.
+```{r CALCULATIONS}
+# Calculate the number of participants who started the intake survey. Save as "start_intake".
+start_intake <- length(unique(na.omit(intake$participant_code))) + sum(is.na(intake$participant_code)) # Add the number of unique participant codes, and the number of participant codes = NA. Participant code = NA means a participant started, but did not finish, the intake survey.
+
+# Calculate the number of participants who live outside the US. Save as "lives_outside_us".
+lives_outside_us <- intake %>% 
+  filter(state == "I do not reside in the United States") %>% # Filter for participants who stated that they do not reside in the United States.
+  summarise(sum(is.na(participant_code))) # If a participant stated that they do not reside in the United States, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who live inside the US. Save as "lives_inside_us".
+lives_inside_us <- intake %>% 
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States (they did not indicate that they do not reside in the United States, and they answered the question (!=is.na)).
+  summarise(length(unique(na.omit(participant_code))) + sum(is.na(participant_code)) ) # Add the number of unique participant codes, and the number of remaining participant codes = NA.
+
+# Calculate the number of participants who did not consent. Save as "did_not_consent".
+did_not_consent <- intake %>%
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'No, I do NOT consent') %>% # Filter for participants who did not consent.
+  summarise(sum(is.na(participant_code))) # If a participant did not consent, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who did consent. Save as "did_consent".
+did_consent <- intake %>%
+  filter(Consent == 'Yes, I consent') %>% # Filter for participants who stated that they did consent.
+  summarise(length(unique(na.omit(participant_code))) + sum(is.na(participant_code)) ) # Add the number of unique participant codes, and the number of remaining participant codes = NA.
+
+# Calculate the number of participants who claimed to use a non-existent platform (JiveHive). Save as "use_fake_platform".
+use_fake_platform <- intake %>%
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'Yes, I consent') %>% # Filter for participants who consented.
+  filter((platforms_jive == 2) | (platforms_jive == 1) | is.na(platforms_jive)) %>% # Filter for participants who indicated that they used Jive some (= 1) or a lot (= 2), or did not answer the question (is.na).
+  summarise(sum(is.na(participant_code))) # If a participant indicated that they used Jive some (= 1) or a lot (= 2), or did not answer the question, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who did not claim to use a non-existent platform (JiveHive). Save as "did_not_use_fake_platform".
+did_not_use_fake_platform <- intake %>% 
+  filter(platforms_jive == 0) %>% # Filter for participants who indicated that they did not use Jive at all (= 0).
+  summarise(length(unique(na.omit(participant_code))) + sum(is.na(participant_code)) ) # Add the number of unique participant codes, and the number of remaining participant codes = NA.
+
+# Calculate the number of participants who are under the age of 18. Save as "under_18".
+under_18 <- intake %>% 
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'Yes, I consent') %>% # Filter for participants who consented.
+  filter(platforms_jive == 0) %>% # Filter for participants who do not use Jive.
+  filter(age < 18 | is.na(age)) %>% # Filter for participants who are younger than 18 (< 18), or did not answer the question (is.na).
+  summarise(sum(is.na(participant_code))) # If a participant is younger than 18 (< 18), or did not answer the question, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who are 18 or older. Save as "older_or_is_18".
+older_or_is_18 <- intake %>% 
+  filter(age >= 18) %>% # Filter for participants who are 18 or older (>=18).
+  summarise(length(unique(na.omit(participant_code))) + sum(is.na(participant_code)) ) # Add the number of unique participant codes, and the number of remaining participant codes = NA.
+
+# Calculate the number of participants who use a device that is not Android or iPhone. Save as "do_not_use_android_iphone".
+do_not_use_android_iphone <- intake %>%
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'Yes, I consent') %>% # Filter for participants who consented.
+  filter(platforms_jive == 0) %>% # Filter for participants who do not use Jive.
+  filter(age >= 18) %>% # Filter for participants who are 18 or older.
+  filter(device == "Something else" | is.na(device)) %>% # Filter for participants who indicated their device is not an Android/iPhone (Something else) or did not answer the question (is.na).
+  summarise(sum(is.na(participant_code))) # If a participant indicated their device is not an Android/iPhone (Something else) or did not answer the question, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who use a Android or iPhone device. Save as "use_android_iphone".
+use_android_iphone <- intake %>%
+  filter((device == "Android") | (device == "Apple iPhone")) %>% # Filter for participants who indicated they used an Android or Apple iPhone.
+  summarise(length(unique(na.omit(participant_code))) + sum(is.na(participant_code)) ) # Add the number of unique participant codes, and the number of remaining participant codes = NA.
+
+# Calculate the number of participants who were unwilling to download the app. Save as "did_not_download".
+did_not_download <- intake %>%
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'Yes, I consent') %>% # Filter for participants who consented.
+  filter(platforms_jive == 0) %>% # Filter for participants who do not use Jive.
+  filter(age >= 18) %>% # Filter for participants who are 18 or older.
+  filter((device == "Android") | (device == "Apple iPhone")) %>% # Filter for participants who use an Android or Apple iPhone
+  filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>% # Filter for participants who had an Apple iPhone or Android and did not want to download the app (No, I am NOT).
+  summarise(sum(is.na(participant_code))) # If a participant did not want to download the app, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who downloaded the app. Save as "did_download".
+did_download <- intake %>%
+  filter((download_apple == 'Yes, I am') | (download_android == 'Yes, I am')) %>% # Filter for participants who had an Apple iPhone or Android and did download the app (Yes, I am).
+  summarise(length(unique(na.omit(participant_code))) + sum(is.na(participant_code)) ) # Add the number of unique participant codes, and the number of remaining participant codes = NA.
+
+# Calculate the number of participants who failed "3" attention check. Save as "failed_attention_check".
+failed_attention_check <- intake %>%
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'Yes, I consent') %>%  # Filter for participants who consented.
+  filter(platforms_jive == 0) %>% # Filter for participants who do not use Jive.
+  filter(age >= 18) %>% # Filter for participants who are 18 or older.
+  filter((device == "Android") | (device == "Apple iPhone")) %>% # Filter for participants who use an Android or Apple iPhone.
+  filter((download_apple == 'Yes, I am') | (download_android == 'Yes, I am')) %>% # Filter for participants who downloaded the app.
+  filter(screen_image != 3.0 | is.na(screen_image)) %>% # Filter for participants who did not write the number 3, or did not answer the question.
+  summarise(sum(is.na(participant_code))) # If a participant did not write the number 3, or did not answer the question, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who passed "3" attention check. Save as "passed_attention_check".
+passed_attention_check <- intake %>%
+  filter(screen_image == 3.0) %>% # Filter for participants who wrote the number 3.
+  summarise(length(unique(na.omit(participant_code))) + sum(is.na(participant_code)) ) # Add the number of unique participant codes, and the number of remaining participant codes = NA.
+
+# Calculate the number of participants who finished the intake survey. Save as "intake_completes".
+intake_completes <- intake %>%
+  filter(!is.na(participant_code)) %>% # If a participant did not finish the intake survey, then their participant code = NA. Filter out the rows without a participant code (!is.na).
+  summarise(length(unique(participant_code))) # Calculate the number of unique participant codes.
+
+# Calculate the number of participants who dropped due to forced attrition. Save as "forced_attrition".
+forced_attrition <- lives_outside_us + did_not_consent + use_fake_platform + under_18 + do_not_use_android_iphone + did_not_download + failed_attention_check # Add the number of participants who live outside the US, did not consent, claimed to use a fake platform, are under the age of 18, do not use an Android/iPhone, did not download the app, and failed the attention check. These are instances of forced attrition.
+
+# Calculate the number of participants who dropped due to unforced attrition. Save as "unforced_attrition".
+unforced_attrition <- start_intake - intake_completes - forced_attrition # If a participant dropped between starting and completing the intake survey (start_intake - intake_completes), and also did not drop due to forced attrition (- forced_attrition), then they voluntarily attrited.
+```
+
+# FIGURE FORMATTING.
+```{r FIGURE FORMATTING}
+# Create the flowchart.
+figure3 <- grViz( # Use functions grViz and glue.
+glue(
+  
+  ###############SET FLOWCHART PARAMETERS###############
+  "digraph flowchart {{ # Create a directed graph flowchart.
+  
+  graph [layout = dot, rankdir = TB, ranksep=0.1] # layout = dot indicates a hierarchical flowchart direction. rankdir = TB indicates a top to bottom flow. ranksep = 0.1 specifies spacing between items.
+  
+  node [shape = rectangle, style = filled, fillcolor = white, width = 3, height = 1] # shape = rectangle indicates rectangle boxes, style = filled and fillcolor = white indicates the boxes will be white. width = 3 and height = 1 specifies the width and height of the box.
+
+  ###############CREATE FLOWCHART BOXES, SPECIFY LABEL AND N-VALUE (WHICH WAS CALCULATED IN THE # CALCULATIONS. CHUNK ABOVE)###############
+  
+  # Generally, the format for the following lines are: name of box (e.g., start_intake), label in box (e.g., Started intake), N value (e.g., N = start_intake). <br/> indicates a line break. <i> indicates italics.
+
+  start_intake [label = <Started intake<br/><i>N</i> = {start_intake}>] 
+
+  lives_outside_us [label = <Lives outside the US<br/><i>N</i> = {lives_outside_us}>]
+  
+  lives_inside_us [label = <Lives in the US<br/><i>N</i> = {lives_inside_us}>]
+  
+  did_not_consent [label = <Did not consent<br/><i>N</i> = {did_not_consent}>]
+  
+  did_consent[label = <Consented<br/><i>N</i> = {did_consent}>]
+  
+  use_fake_platform[label = <Claimed to use fake<br/>platform<br/><i>N</i> = {use_fake_platform}>]
+  
+  did_not_use_fake_platform[label = <Did not claim to use fake<br/>platform<br/><i>N</i> = {did_not_use_fake_platform}>]
+  
+  under_18[label = <Age &lt; 18 <br/><i>N</i> = {under_18}>]
+  
+  older_or_is_18[label = <Age ≥ 18<br/><i>N</i> = {older_or_is_18}>]
+  
+  do_not_use_android_iphone[label = <Uses a device that is not<br/>Android or iPhone<br/><i>N</i> = {do_not_use_android_iphone}>]
+  
+  use_android_iphone[label = <Android or iPhone user<br/><i>N</i> = {use_android_iphone}>]
+  
+  did_not_download[label = <Would not download app<br/><i>N</i> = {did_not_download}>]
+  
+  did_download[label = <Would download app<br/><i>N</i> = {did_download}>]
+  
+  failed_attention_check[label = <Failed \"3\" attention check<br/><i>N</i> = {failed_attention_check}>]
+  
+  passed_attention_check[label = <Passed \"3\" attention check<br/><i>N</i> = {passed_attention_check}>]
+  
+  unforced_attrition[label = <Unforced attrition<br/><i>N</i> = {unforced_attrition}>]
+  
+  intake_completes[label = <Finished intake survey<br/><i>N</i> = {intake_completes}>]
+  
+  ###############CREATE ALL INTERMEDIATE STEPS WITHIN THE FLOWCHART###############
+  
+  # The layout of the attrition flowchart includes the numbers of participants who dropped/didn't finish a specific part of the experiment. The number of participants who dropped/didn't finish are depicted in between the part that they started and the part that they did not finish. In order to visually depict these participants between the two parts, a mid-point needs to be created within the line connecting the two parts. These midpoints are labeled with blank spaces, and the box dimensions are minimized so that they do not appear on the flowchart (width = 0.001, height = 0.001). There are 8 midpoints, indicating 8 points in which participants dropped from the survey.
+  
+  blank1 [label = '', width = 0.001, height = 0.001]
+  
+  blank2 [label = '', width = 0.001, height = 0.001]
+  
+  blank3 [label = '', width = 0.001, height = 0.001]
+  
+  blank4 [label = '', width = 0.001, height = 0.001]
+  
+  blank5 [label = '', width = 0.001, height = 0.001]
+  
+  blank6 [label = '', width = 0.001, height = 0.001]
+   
+  blank7 [label = '', width = 0.001, height = 0.001]   
+  
+  blank8 [label = '', width = 0.001, height = 0.001]
+      
+  ###############CONNECT FLOWCHART BOXES###############   
+  
+  # Connect the boxes in the flowchart. For example, start_intake connects to lives_inside_us, with blank1 as a intermediate step (blank 1) between the two. lives_outside_us is an offshoot of the intermediate step (blank1). Minimize the arrow and line in the connection between start_intake and blank1 (dir=none, minlen=1). Create a line connecting the intermediate step to the lives_outside_us box. The lives_outside_us box should visually be on the same level as the intermediate step (rank = same; blank1 lives_outside_us). Finally, connect the intermediate step to lives_inside_us. The same format applies for all intermediate steps.
+
+  start_intake -> blank1[dir=none, minlen=1]
+  
+  blank1 -> lives_outside_us[minlen = 7.5]; {{rank = same; blank1 lives_outside_us}}
+
+  blank1 -> lives_inside_us
+  
+  
+  lives_inside_us -> blank2[dir=none, minlen=1]
+  
+  blank2 -> did_not_consent[minlen = 7.5]; {{rank = same; blank2 did_not_consent}}
+  
+  blank2 -> did_consent
+  
+  
+  did_consent -> blank3[dir=none, minlen=1]
+  
+  blank3 -> use_fake_platform[minlen = 7.5]; {{rank = same; blank3 use_fake_platform}}
+  
+  blank3 -> did_not_use_fake_platform
+  
+  
+  did_not_use_fake_platform -> blank4[dir=none, minlen=1]
+  
+  blank4 -> under_18[minlen = 7.5]; {{rank = same; blank4 under_18}}
+  
+  blank4 -> older_or_is_18  
+  
+  
+  older_or_is_18 -> blank5[dir=none, minlen=1]
+  
+  blank5 -> do_not_use_android_iphone[minlen = 7.5]; {{rank = same; blank5 do_not_use_android_iphone}}
+  
+  blank5 -> use_android_iphone 
+
+
+  use_android_iphone -> blank6[dir=none, minlen=1]
+  
+  blank6 -> did_not_download[minlen = 7.5]; {{rank = same; blank6 did_not_download}}
+  
+  blank6 -> did_download   
+  
+  
+  did_download -> blank7[dir=none, minlen=1]
+  
+  blank7 -> failed_attention_check[minlen = 7.5]; {{rank = same; blank7 failed_attention_check}}
+  
+  blank7 -> passed_attention_check   
+
+  
+  passed_attention_check -> blank8[dir=none, len=0.1]
+  
+  blank8 -> unforced_attrition[minlen = 7.5]; {{rank = same; blank8 unforced_attrition}}
+  
+  blank8 -> intake_completes[len=0.1]   
+
+}}"))
+
+
+```
+
+# FINAL FIGURE.
+```{r FINAL FIGURE}
+figure3
+```

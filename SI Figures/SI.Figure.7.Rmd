@@ -1,0 +1,234 @@
+---
+title: "SI.Figure.7"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+library(extrafont)
+loadfonts(device = "win")
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# STANDARDIZE VARIABLES.
+```{r STANDARDIZE VARIABLES}
+# Standardize delta_ih_1.
+data <- data %>% 
+  mutate(delta_ih_1 = scale(delta_ih_1))
+
+# Standardize delta_ih_2.
+data <- data %>% 
+  mutate(delta_ih_2 = scale(delta_ih_2))
+
+# Standardize delta_ih_3.
+data <- data %>% 
+  mutate(delta_ih_3 = scale(delta_ih_3))
+
+# Standardize delta_ih_4.
+data <- data %>% 
+  mutate(delta_ih_4 = scale(delta_ih_4))
+
+# Standardize delta_ih_5.
+data <- data %>% 
+  mutate(delta_ih_5 = scale(delta_ih_5))
+
+# Standardize delta_ih_6.
+data <- data %>% 
+  mutate(delta_ih_6 = scale(delta_ih_6))
+```
+
+# FORMAT DATA.
+```{r FORMAT DATA}
+# Create dataframe "data_delta_ih" which excludes the participant who didn't answer all of the intellectual humility measures.
+data_delta_ih <- data[data$participant_code != "9paveb", ]
+```
+
+# CREATE FUNCTION TO CALCULATE THE BOOTSTRAP ANALYSIS.
+```{r CREATE FUNCTION TO CALCULATE THE BOOTSTRAP ANALYSIS}
+# Treatment effects will be re-calculated for each intellectual humility item. Create a function "treatment_effect" which calculates the treatment effect for a given intellectual humility item.
+treatment_effect <- function(delta_ih_item){ # Input intellectual humility item (e.g. delta_ih_1).
+
+  # Set seed for analysis.
+  set.seed(8675309)
+  
+  # Set the number of bootstrap samples.
+  n_boots <- 5000
+  
+  # Calculate the mean delta_ih_item score for participants in the treatment condition.
+  mean_treatment <- data_delta_ih %>% 
+    filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+    summarise(mean = mean({{delta_ih_item}})) %>% # Calculate the mean of the delta_ih_item.
+    pull(mean) # Save the mean as "mean_treatment".
+  
+  # Calculate the mean delta_ih_item score for participants in the control condition.
+  mean_control <- data_delta_ih %>% 
+    filter(condition == "control") %>% # Filter for participants in the control condition.
+    summarise(mean = mean({{delta_ih_item}})) %>% # Calculate the mean of the delta_ih_item.
+    pull(mean) # Save the mean as "mean_control". 
+  
+  # Calculate the difference "beta" between the treatment and control means.
+  beta <- mean_treatment - mean_control
+  
+  # Bootstrapping.
+  boots <- replicate(n_boots, { # Run the following lines of code 5,000 times (n_boots = 5000).
+    
+    # Create a bootstrap sample by randomly sampling all rows with replacement.
+      boot <- data_delta_ih %>% sample_frac(1, replace = TRUE)
+      
+    # In the bootstrap sample, calculate the mean delta_ih_item score for participants in the treatment condition.
+      boot_mean_treatment <- boot %>% 
+        filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+        summarise(mean = mean({{delta_ih_item}})) %>% # Calculate the mean of the delta_ih_item.
+        pull(mean) # Save the mean as "boot_mean_treatment".
+      
+    # In the bootstrap sample, calculate the mean delta_ih_item score for participants in the control condition.
+      boot_mean_control <- boot %>% 
+        filter(condition == "control") %>% # Filter for participants in the control condition.
+        summarise(mean = mean({{delta_ih_item}})) %>% # Calculate the mean of the delta_ih_item.
+        pull(mean) # Save the mean as "boot_mean_control".
+     
+    # Calculate the difference between the treatment and control bootstrap means.
+      boot_mean_treatment - boot_mean_control})
+   
+  # Calculate a 90% confidence interval for the bootstraps.
+  ci_90 <- quantile(boots, probs = c(0.05, 0.95)) # Save the 5th (lower bound) and 95th (upper bound) percentile of the bootstraps.
+ 
+  # Calculate a 95% confidence interval for the bootstraps.
+  ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+  
+  # Save the 90% and 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 7.
+  ci_90_lo <- c(round(ci_90[1], 4)) # Round to 4 digits.
+  ci_90_hi <- c(round(ci_90[2], 4)) # Round to 4 digits.
+  ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+  ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+    
+  # Return the delta_ih_item, beta, and 90% and 95% confidence interval results.
+  return(as.data.frame(cbind(Item = substitute(delta_ih_item), Beta = beta, CI_95_Lo = ci_95_lo, CI_95_Hi = ci_95_hi, CI_90_Lo = ci_90_lo, CI_90_Hi = ci_90_hi)))}
+```
+
+# RUN BOOTSTRAPS.
+```{r RUN BOOTSTRAPS}
+# Run bootstrap analysis on delta_ih_1. Save results in dataframe "ih_1".
+ih_1 <- treatment_effect(delta_ih_1)
+
+# Run bootstrap analysis on delta_ih_2. Save results in dataframe "ih_2".
+ih_2 <- treatment_effect(delta_ih_2)
+
+# Run bootstrap analysis on delta_ih_3. Save results in dataframe "ih_3".
+ih_3 <- treatment_effect(delta_ih_3)
+
+# Run bootstrap analysis on delta_ih_4. Save results in dataframe "ih_4".
+ih_4 <- treatment_effect(delta_ih_4)
+
+# Run bootstrap analysis on delta_ih_5. Save results in dataframe "ih_5".
+ih_5 <- treatment_effect(delta_ih_5)
+
+# Run bootstrap analysis on delta_ih_6. Save results in dataframe "ih_6".
+ih_6 <- treatment_effect(delta_ih_6)
+```
+
+# SAVE ALL ANALYSES INTO ONE DATAFRAME.
+```{r SAVE ALL ANALYSES INTO ONE DATAFRAME}
+# Save all analyses into dataframe "figure7_data".
+figure7_data <- as.data.frame(rbind(ih_1, ih_2, ih_3, ih_4, ih_5, ih_6))
+
+# Create column "Text" which contains corresponding item text.
+figure7_data <- cbind(figure7_data, Text = c("I question my own opinions, positions, and viewpoints because they could be wrong.", # Item 1.
+                     "I reconsider my opinions when presented with new evidence.", # Item 2.
+                     "I recognize the value in opinions that are different from my own.", # Item 3.
+                     "I accept that my beliefs and attitudes may be wrong.", # Item 4.
+                     "In the face of conflicting evidence, I am open to changing my opinions.", # Item 5.
+                     "I liked finding out new information that differs from what I already think is true.")) # Item 6.
+  
+# Assign colors to column "Color" based on if 0 is contained in the confidence interval (gray) or not contained in the confidence interval (black).
+figure7_data <- figure7_data %>% 
+  mutate(Color = case_when(
+    CI_95_Hi > 0 & CI_95_Lo > 0 ~ "black", # If the upper and lower bounds of the confidence interval are greater than 0, then assign black.
+    CI_95_Hi < 0 & CI_95_Lo < 0 ~ "black", # If the upper and lower bounds of the confidence interval are less than 0, then assign black.
+    TRUE ~ "gray")) # Otherwise, the confidence interval contains 0. Assign gray.
+
+# Convert beta and confidence interval columns to numeric.
+figure7_data <- figure7_data %>% 
+  mutate(Beta = as.numeric(Beta)) %>% 
+  mutate(CI_95_Lo = as.numeric(CI_95_Lo)) %>% 
+  mutate(CI_95_Hi = as.numeric(CI_95_Hi)) %>% 
+  mutate(CI_90_Lo = as.numeric(CI_90_Lo)) %>% 
+  mutate(CI_90_Hi = as.numeric(CI_90_Hi))
+```
+
+# FORMATTING FIGURE.
+```{r FORMATTING FIGURE}
+# Add the beta values and confidence intervals to the graph.
+figure7 <- ggplot(figure7_data, aes(x=Beta, y=Text, color = Color)) + # Define dataset, x, y and color variables.
+  geom_point(size=8, show.legend = FALSE) + # Create points on the graph for the beta values. Define the size of the point as 8.
+  geom_errorbarh(aes(y=Text, xmin=CI_90_Lo, xmax=CI_90_Hi), # Create error bars for the 90% confidence intervals.
+                 linewidth=2, height = 0, show.legend = FALSE) + # Define line width as 2 and height as 0 (this ensures that the error bar is just a line with no end bars).
+  geom_errorbarh(aes(y=Text, xmin=CI_95_Lo, xmax=CI_95_Hi), # Create error bars for the 95% confidence intervals.
+                 linewidth=1, height=0, show.legend = FALSE, lineend = "round") # Define line width as 1 and height as 0 (this ensures that the error bar is just a line with no end bars).
+  
+# Add a vertical line at x=0.
+figure7 <- figure7 +
+  geom_vline(xintercept=0, linetype="dotted", size=2) # Define the line type as dotted, and size as 2.
+
+# Change the background colors of the graph.
+figure7 <- figure7 +
+  theme_minimal()
+
+# Format the y-axis.
+figure7 <- figure7+
+  scale_y_discrete(limits = rev(c("I question my own opinions, positions, and viewpoints because they could be wrong.", # Specify order of the items.
+                     "I reconsider my opinions when presented with new evidence.", 
+                     "I recognize the value in opinions that are different from my own.", 
+                     "I accept that my beliefs and attitudes may be wrong.", 
+                     "In the face of conflicting evidence, I am open to changing my opinions.", 
+                     "I liked finding out new information that differs from what I already think is true.")),
+                   labels = function(x) str_wrap(x, width = 20)) + # Condense the size of the item labels, so that they are split into 2-3 lines of text.
+  ylab(" ") + # Label the y-axis with a blank " ".
+  theme(axis.text.y = element_text(margin = margin(t = 0, r = 80, b = 0, l = 0), # Define the size of the margins of the item labels (t = top, r = right, b = bottom, l = left).
+                                   size=14, hjust = 0.5), # Define the text size as 14, and center the text.
+        text = element_text(family="Verdana")) # Define the text font as "Verdana".
+
+# Format the x-axis.
+figure7 <- figure7 + 
+  scale_x_continuous(limits = c(-0.29, 0.29)) + # Limit the x-axis between the range of -0.29 to 0.29.
+  xlab("Treatment effect (in SDs)") + # Define the x-axis label as "Treatment effect (in SDs)".
+  theme(axis.title.x = element_text(size=18, face="bold"), # Define the text as size 18 and bold.
+        text = element_text(family="Verdana")) # Define the text font as "Verdana".
+
+# Add colors.
+figure7 <- figure7 + 
+  scale_color_identity() # Ensure the colors of the points/bars are in accordance with the colors stated in the dataframe.
+```
+
+# FINAL FIGURE.
+```{r FINAL FIGURE}
+print(figure7)
+ggsave('./ih_effects.png', units = 'in', width = 15, height = 7.5, dpi = 300)
+figure7
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+

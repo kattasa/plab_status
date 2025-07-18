@@ -1,0 +1,431 @@
+---
+title: "SI.Figure.5"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+library(extrafont)
+loadfonts(device = "win")
+library(lubridate)
+library(ggpubr)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# STANDARDIZE VARIABLES.
+```{r STANDARDIZE VARIABLES}
+# Standardize linguistic intellectual humility scores (ih_a_all).
+data <- data %>% 
+  mutate(ih_a_all = scale(ih_a_all))
+
+# Standardize emotional experience scores (panas).
+data <- data %>% 
+  mutate(panas = scale(panas))
+```
+
+# CLASSIFY PARTICIPANTS BY DAY OF PARTICIPATION.
+```{r CLASSIFY PARTICIPANTS BY DAY OF PARTICIPATION}
+# Convert participation times to date objects.
+data <- data %>% 
+  mutate(date_participated = as.Date(StartDate, format = "%m/%d/%Y %H:%M")) # Convert the variable StartDate (which is in the format month/day/year hour:minute) to a date object.
+
+# Rank the dates from earliest to latest. Classify participants' day of participation as day 1, day 2, or day 3.
+data <- data %>% 
+  mutate(day_of_participation = dense_rank(date_participated)) # Rank dates from 1 (earliest) to 3 (latest).
+
+# Create new dataframe "Day_1_Participation" which includes only participants who participated on day 1 of the experiment.
+day_1_participation <- as.data.frame(subset(data, day_of_participation == 1)) # Subset data.
+
+# Create new dataframe "Day_2_Participation" which includes only participants who participated on day 2 of the experiment.
+day_2_participation <- as.data.frame(subset(data, day_of_participation == 2)) # Subset data.
+
+# Create new dataframe "Day_3_Participation" which includes only participants who participated on day 3 of the experiment.
+day_3_participation <- as.data.frame(subset(data, day_of_participation == 3)) # Subset data.
+```
+
+# BOOTSTRAP: DAY 1.
+```{r BOOTSTRAP: DAY 1}
+###############LINGUISTIC INTELLECTUAL HUMILITY (IH)###############
+
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Create new dataframe "day_1_ih" in which NAs are excluded from ih_a_all.
+day_1_ih <- as.data.frame(subset(day_1_participation, !is.na(ih_a_all)))
+
+# Calculate the mean "ih_a_all" score for participants in the treatment condition.
+mean_treatment <- mean(day_1_ih %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("ih_a_all")) # Calculate the mean of ih_a_all.
+                          
+# Calculate the mean "ih_a_all" score for participants in the control condition.
+mean_control <- mean(day_1_ih %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("ih_a_all")) # Calculate the mean of ih_a_all.
+  
+# Calculate the difference "day_1_ih_beta" between the treatment and control means.
+day_1_ih_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- day_1_ih %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("ih_a_all")) - mean(boot %>% filter(condition == "control") %>% pull("ih_a_all"))}) # Calculate the difference between mean treatment ih_a_all and mean control ih_a_all.
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Save the 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 5.
+day_1_ih_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+day_1_ih_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95)
+
+###############EMOTIONAL EXPERIENCE###############
+
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Calculate the mean "panas" score for participants in the treatment condition.
+mean_treatment <- mean(day_1_participation %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("panas")) # Calculate the mean of panas.
+                          
+# Calculate the mean "panas" score for participants in the control condition.
+mean_control <- mean(day_1_participation %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("panas")) # Calculate the mean of panas.
+  
+# Calculate the difference "day_1_emotion_beta" between the treatment and control means.
+day_1_emotion_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- day_1_participation %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas")) - mean(boot %>% filter(condition == "control") %>% pull("panas"))}) # Calculate the difference between mean treatment panas and mean control panas.
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Save the 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 5.
+day_1_emotion_ci_95_lo <- c(round(ci_95[1], 4)) #Round to 4 digits.
+day_1_emotion_ci_95_hi <- c(round(ci_95[2], 4)) #Round to 4 digits.
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95)
+```
+
+# BOOTSTRAP: DAY 2.
+```{r BOOTSTRAP: DAY 2}
+###############LINGUISTIC INTELLECTUAL HUMILITY (IH)###############
+
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Create a new dataframe "day_2_ih" in which NAs are excluded from ih_a_all.
+day_2_ih <- as.data.frame(subset(day_2_participation, !is.na(ih_a_all)))
+
+# Calculate the mean "ih_a_all" score for participants in the treatment condition.
+mean_treatment <- mean(day_2_ih %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("ih_a_all")) # Calculate the mean of ih_a_all.
+                          
+# Calculate the mean "ih_a_all" score for participants in the control condition.
+mean_control <- mean(day_2_ih %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("ih_a_all")) # Calculate the mean of ih_a_all.
+  
+# Calculate the difference "day_2_ih_beta" between the treatment and control means.
+day_2_ih_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- day_2_ih %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("ih_a_all")) - mean(boot %>% filter(condition == "control") %>% pull("ih_a_all"))}) # Calculate the difference between mean treatment ih_a_all and mean control ih_a_all.
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Save the 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 5.
+day_2_ih_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+day_2_ih_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95)
+
+###############EMOTIONAL EXPERIENCE###############
+
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Calculate the mean "panas" score for participants in the treatment condition.
+mean_treatment <- mean(day_2_participation %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("panas")) # Calculate the mean of panas.
+                          
+# Calculate the mean "panas" score for participants in the control condition.
+mean_control <- mean(day_2_participation %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("panas")) # Calculate the mean of panas.
+  
+# Calculate the difference "day_2_emotion_beta" between the treatment and control means.
+day_2_emotion_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- day_2_participation %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas")) - mean(boot %>% filter(condition == "control") %>% pull("panas"))}) # Calculate the difference between mean treatment panas and mean control panas.
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Save the 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 5.
+day_2_emotion_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+day_2_emotion_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95)
+```
+
+# BOOTSTRAP: DAY 3.
+```{r BOOTSTRAP: DAY 3}
+###############LINGUISTIC INTELLECTUAL HUMILITY (IH)###############
+
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Create a new dataframe "day_3_ih" in which NAs are excluded from ih_a_all.
+day_3_ih <- as.data.frame(subset(day_3_participation, !is.na(ih_a_all)))
+
+# Calculate the mean "ih_a_all" score for participants in the treatment condition.
+mean_treatment <- mean(day_3_ih %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("ih_a_all")) # Calculate the mean of ih_a_all.
+                          
+# Calculate the mean "ih_a_all" score for participants in the control condition.
+mean_control <- mean(day_3_ih %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("ih_a_all")) # Calculate the mean of ih_a_all.
+  
+# Calculate the difference "day_3_ih_beta" between the treatment and control means.
+day_3_ih_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- day_3_ih %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("ih_a_all")) - mean(boot %>% filter(condition == "control") %>% pull("ih_a_all"))}) # Calculate the difference between mean treatment ih_a_all and mean control ih_a_all.
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Save the 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 5.
+day_3_ih_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+day_3_ih_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95)
+
+###############EMOTIONAL EXPERIENCE###############
+
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Calculate the mean "panas" score for participants in the treatment condition.
+mean_treatment <- mean(day_3_participation %>%
+                       filter(condition == "treat") %>% # Within the dataframe, filter for participants in the treatment condition.
+                       pull("panas")) # Calculate the mean of panas.
+                          
+# Calculate the mean "panas" score for participants in the control condition.
+mean_control <- mean(day_3_participation %>% 
+                       filter(condition == "control") %>% # Within the dataframe, filter for participants in the control condition.
+                       pull("panas")) # Calculate the mean of panas.
+  
+# Calculate the difference "day_3_emotion_beta" between the treatment and control means.
+day_3_emotion_beta <- mean_treatment - mean_control
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- day_3_participation %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas")) - mean(boot %>% filter(condition == "control") %>% pull("panas"))}) # Calculate the difference between mean treatment panas and mean control panas.
+  
+# Calculate a 95% confidence interval for the bootstraps.
+ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+
+# Save the 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 5.
+day_3_emotion_ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+day_3_emotion_ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, mean_treatment, mean_control, boots, ci_95)
+```
+
+# SAVE ALL ANALYSES AS DATAFRAMES.
+```{r SAVE ALL ANALYSES AS DATAFRAMES}
+# Create dataframe for linguistic intellectual humility results "data_ih".
+data_ih <- data.frame(
+  Day = factor(c("Day 1", # Identify the days of participation.
+                     "Day 2",
+                     "Day 3")),
+  Beta = c(day_1_ih_beta, day_2_ih_beta, day_3_ih_beta), # Identify the beta values.
+  Lower_CI_95 = c(day_1_ih_ci_95_lo, day_2_ih_ci_95_lo, day_3_ih_ci_95_lo), # Lower bounds of the 95% confidence intervals.
+  Upper_CI_95 = c(day_1_ih_ci_95_hi, day_2_ih_ci_95_hi, day_3_ih_ci_95_hi), # Upper bounds of the 95% confidence intervals.
+  Color = c("deepskyblue3", "deepskyblue3","deepskyblue3"))
+
+# Create dataframe for emotional experience results "data_emotion".
+data_emotion <- data.frame(
+  Day = factor(c("Day 1", # Identify the days of participation.
+                     "Day 2",
+                     "Day 3")),
+  Beta = c(day_1_emotion_beta, day_2_emotion_beta, day_3_emotion_beta), # Identify the beta values.
+  Lower_CI_95 = c(day_1_emotion_ci_95_lo, day_2_emotion_ci_95_lo, day_3_emotion_ci_95_lo), # Lower bounds of the 95% confidence intervals.
+  Upper_CI_95 = c(day_1_emotion_ci_95_hi, day_2_emotion_ci_95_hi, day_3_emotion_ci_95_hi), # Upper bounds of the 95% confidence intervals.
+  Color = c("#ff7406","#ff7406", "#ff7406"))
+```
+
+# FORMAT FIGURE.
+```{r FORMAT FIGURE}
+# Add the linguistic intellectual humility beta values and error bars to the graph.
+figure5 <- ggplot() + 
+  geom_point(data = data_ih, aes(x=as.numeric(Day), y=Beta, color = Color), size=8) + # Define dataset, x, y and color variables. Create points on the graph for the beta values. Define the size of the point as 8.
+  geom_linerange(data = data_ih, aes(x=as.numeric(Day), y=Beta, ymin=Lower_CI_95, ymax=Upper_CI_95, color = Color), # Create error bars for the 95% confidence intervals. 
+                 linewidth=1, lineend = "round") # Define line width as 1, and the line end shape as round.
+
+# Add the emotional experience beta values and error bars to the graph.
+figure5 <- figure5 +
+  geom_point(data = data_emotion, aes(x=as.numeric(Day) + 0.3, y=Beta, color = Color), size=8) + # Define dataset, x, y and color variables. Create points on the graph for the beta values, shifted to the right by 0.3. Define the size of the point as 8.
+  geom_linerange(data = data_emotion, aes(x=as.numeric(Day) + 0.3, y=Beta, ymin=Lower_CI_95, ymax=Upper_CI_95, color = Color), # Create error bars, shifted to the right by 0.3, for the 95% confidence intervals. 
+                 linewidth=1, lineend = "round") # Define line width as 1, and the line end shape as round.
+ 
+# Add a horizontal line at y=0 and a vertical line after Day 1.
+figure5 <- figure5 + 
+  geom_hline(yintercept=0, linetype="dashed", size=2) + # Horizontal line at y=0. Define the line as dashed, with a line width of 2.
+  geom_vline(xintercept = 1.65) # Vertical line after Day 1, at x = 1.65.
+
+# Change background.
+figure5 <- figure5 + 
+  theme_classic()
+
+# Format the y-axis.
+figure5 <- figure5 + 
+  scale_y_continuous(breaks = c(-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6)) + # Define the breaks in the y-axis as -0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6.
+  ylab("Treatment Effect (in SDs)") + # Label the y-axis.
+  theme(axis.title.y = element_text(size = 24, face = "bold"), # Define the y-axis title as font size 24 with bold text.
+        axis.text.y = element_text(size = 14), # Define the y-axis break labels as font size 14.
+        text = element_text(family="Verdana"), # Define the font as "Verdana".
+        axis.ticks.y = element_blank()) # Remove the tick marks from the y-axis. 
+
+# Calculate the N value for each day of participation.
+length(unique(day_1_participation$participant_code)) # Count the number of unique participant codes in day 1.
+length(unique(day_2_participation$participant_code)) # Count the number of unique participant codes in day 2.
+length(unique(day_3_participation$participant_code)) # Count the number of unique participant codes in day 3.
+
+# Format the x-axis.
+figure5 <- figure5 + 
+  xlab(NULL) + # Void the x-axis label.
+  scale_x_continuous(breaks = c(1.15, 2.15, 3.15), labels = c(expression(atop(bold("Day 1"), "(n = 74)")), expression(atop(bold("Day 2"), "(n = 303)")), expression(atop(bold("Day 3"), "(n = 666)")))) + # Create custom x-axis break labels for Day 1, Day 2, and Day 3. Include the N value for each day of participation.
+  theme(axis.text.x = element_text(size = 18), # Define the x-axis break labels as font size 18.
+        text = element_text(family="Verdana"), # Define the font as "Verdana".
+        axis.ticks.x = element_blank()) # Remove the tick marks from the x-axis.
+  
+# Assign color.
+figure5 <- figure5 +
+  scale_color_identity() # Assign color based on Color variable.
+```
+
+# FINAL FIGURE.
+```{r FINAL FIGURE}
+print(figure5)
+
+ggsave('./dayblation.png', units = 'in', width = 15, height = 7.5, dpi = 300)
+figure5
+dev.off()
+```
+
+# CHECK IF TREATMENT EFFECTS ARE SIGNIFICANT.
+```{r CHECK IF TREATMENT EFFECTS ARE SIGNIFICANT}
+###############DAY 1###############
+
+# Run a t-test comparing ih_a_all scores between treatment and control groups.
+day_1_ih_t_test <- t.test(day_1_ih %>% filter(condition == "treat") %>% pull("ih_a_all"),
+                 day_1_ih %>% filter(condition == "control") %>% pull("ih_a_all"),
+                 na.action = na.omit)
+
+# Print the p-value of the t-test.
+print(day_1_ih_t_test$p.value)
+
+# Run a t-test comparing panas scores between treatment and control groups.
+day_1_emotion_t_test <- t.test(day_1_participation %>% filter(condition == "treat") %>% pull("panas"),
+                 day_1_participation %>% filter(condition == "control") %>% pull("panas"),
+                 na.action = na.omit)
+
+# Print the p-value of the t-test.
+print(day_1_emotion_t_test$p.value)
+
+###############DAY 2###############
+
+# Run a t-test comparing ih_a_all score between treatment and control groups.
+day_2_ih_t_test <- t.test(day_2_ih %>% filter(condition == "treat") %>% pull("ih_a_all"), 
+                 day_2_ih %>% filter(condition == "control") %>% pull("ih_a_all"),
+                 na.action = na.omit)
+
+# Print the p-value of the t-test.
+print(day_2_ih_t_test$p.value)
+
+# Run a t-test comparing panas scores between treatment and control groups.
+day_2_emotion_t_test <- t.test(day_2_participation %>% filter(condition == "treat") %>% pull("panas"),
+                 day_2_participation %>% filter(condition == "control") %>% pull("panas"),
+                 na.action = na.omit)
+
+# Print the p-value of the t-test.
+print(day_2_emotion_t_test$p.value)
+
+###############DAY 3###############
+
+# Run a t-test comparing ih_a_all scores between treatment and control groups.
+day_3_ih_t_test <- t.test(day_3_ih %>% filter(condition == "treat") %>% pull("ih_a_all"), 
+                 day_3_ih %>% filter(condition == "control") %>% pull("ih_a_all"),
+                 na.action = na.omit)
+
+# Print the p-value of the t-test.
+print(day_3_ih_t_test$p.value)
+
+# Run a t-test comparing panas scores between treatment and control groups.
+day_3_emotion_t_test <- t.test(day_3_participation %>% filter(condition == "treat") %>% pull("panas"),
+                 day_3_participation %>% filter(condition == "control") %>% pull("panas"),
+                 na.action = na.omit)
+
+# Print the p-value of the t-test.
+print(day_3_emotion_t_test$p.value)
+```

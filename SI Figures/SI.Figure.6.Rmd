@@ -1,0 +1,243 @@
+---
+title: "SI.Figure.6"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+library(extrafont)
+loadfonts(device = "win")
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# STANDARDIZE VARIABLES.
+```{r STANDARDIZE VARIABLES}
+# Standardize panas_active.
+data <- data %>% 
+  mutate(panas_active = scale(panas_active))
+
+# Standardize panas_attentive.
+data <- data %>% 
+  mutate(panas_attentive = scale(panas_attentive))
+
+# Standardize panas_alert.
+data <- data %>% 
+  mutate(panas_alert = scale(panas_alert))
+
+# Standardize panas_determined.
+data <- data %>% 
+  mutate(panas_determined = scale(panas_determined))
+
+# Standardize panas_inspired.
+data <- data %>% 
+  mutate(panas_inspired = scale(panas_inspired))
+
+# Standardize panas_hostile.
+data <- data %>% 
+  mutate(panas_hostile = scale(panas_hostile))
+
+# Standardize panas_ashamed.
+data <- data %>% 
+  mutate(panas_ashamed = scale(panas_ashamed))
+
+# Standardize panas_upset.
+data <- data %>% 
+  mutate(panas_upset = scale(panas_upset))
+
+# Standardize panas_afraid.
+data <- data %>% 
+  mutate(panas_afraid = scale(panas_afraid))
+
+# Standardize panas_nervous.
+data <- data %>% 
+  mutate(panas_nervous = scale(panas_nervous))
+```
+
+# CREATE FUNCTION TO CALCULATE THE BOOTSTRAP ANALYSIS.
+```{r CREATE FUNCTION TO CALCULATE THE BOOTSTRAP ANALYSIS}
+# Treatment effects will be re-calculated for each panas emotion. Create a function "treatment_effect" which calculates the treatment effect for a given panas emotion.
+treatment_effect <- function(emotion){ # Input panas emotion (e.g. panas_active).
+
+  # Set seed for analysis.
+  set.seed(8675309)
+  
+  # Set the number of bootstrap samples.
+  n_boots <- 5000
+  
+  # Calculate the mean emotion score for participants in the treatment condition.
+  mean_treatment <- data %>% 
+    filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+    summarise(mean = mean({{emotion}})) %>% # Calculate the mean of the panas emotion.
+    pull(mean) # Save the mean as "mean_treatment".
+  
+  # Calculate the mean emotion score for participants in the control condition.
+  mean_control <- data %>% 
+    filter(condition == "control") %>% # Filter for participants in the control condition.
+    summarise(mean = mean({{emotion}})) %>% # Calculate the mean of the panas emotion.
+    pull(mean) # Save the mean as "mean_control".
+  
+  # Calculate the difference "beta" between the treatment and control means.
+  beta <- mean_treatment - mean_control
+  
+  # Bootstrapping.
+  boots <- replicate(n_boots, { # Run the following lines of code 5,000 times (n_boots = 5000).
+    
+    # Create a bootstrap sample by randomly sampling all rows with replacement.
+    boot <- data %>% sample_frac(1, replace = TRUE) 
+    
+    # In the bootstrap sample, calculate the mean emotion score for participants in the treatment condition.
+    boot_mean_treatment <- boot %>% 
+        filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+        summarise(mean = mean({{emotion}})) %>% # Calculate the mean of the panas emotion.
+        pull(mean) # Save the mean as "boot_mean_treatment".
+    
+    # In the bootstrap sample, calculate the mean emotion score for participants in the control condition.      
+    boot_mean_control <- boot %>% 
+        filter(condition == "control") %>% # Filter for participants in the control condition.
+        summarise(mean = mean({{emotion}})) %>% # Calculate the mean of the panas emotion.
+        pull(mean) # Save the mean as "boot_mean_control".
+     
+    # Calculate the difference between the treatment and control bootstrap means.
+    boot_mean_treatment - boot_mean_control})
+    
+  # Calculate a 90% confidence interval for the bootstraps.
+  ci_90 <- quantile(boots, probs = c(0.05, 0.95)) # Save the 5th (lower bound) and 95th (upper bound) percentile of the bootstraps.
+  
+  # Calculate a 95% confidence interval for the bootstraps.
+  ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+  
+  # Save the 90% and 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 6.
+  ci_90_lo <- c(round(ci_90[1], 4)) # Round to 4 digits.
+  ci_90_hi <- c(round(ci_90[2], 4)) # Round to 4 digits.  
+  ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+  ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+    
+  # Return the emotion, beta, and 90% and 95% confidence interval results.
+  return(as.data.frame(cbind(Emotion = substitute(emotion), Beta = beta, CI_95_Lo = ci_95_lo, CI_95_Hi = ci_95_hi, CI_90_Lo = ci_90_lo, CI_90_Hi = ci_90_hi)))}
+```
+
+# RUN BOOTSTRAPS.
+```{r RUN BOOTSTRAPS}
+# Run bootstrap analysis on panas_active. Save results in dataframe "active".
+active <- treatment_effect(panas_active)
+
+# Run bootstrap analysis on panas_attentive. Save results in dataframe "attentive".
+attentive <- treatment_effect(panas_attentive)
+
+# Run bootstrap analysis on panas_alert. Save results in dataframe "alert".
+alert <- treatment_effect(panas_alert)
+
+# Run bootstrap analysis on panas_determined. Save results in dataframe "determined".
+determined <- treatment_effect(panas_determined)
+
+# Run bootstrap analysis on panas_inspired. Save results in dataframe "inspired".
+inspired <- treatment_effect(panas_inspired)
+
+# Run bootstrap analysis on panas_hostile. Save results in dataframe "hostile".
+hostile <- treatment_effect(panas_hostile)
+
+# Run bootstrap analysis on panas_ashamed. Save results in dataframe "ashamed".
+ashamed <- treatment_effect(panas_ashamed)
+
+# Run bootstrap analysis on panas_upset. Save results in dataframe "upset".
+upset <- treatment_effect(panas_upset)
+
+# Run bootstrap analysis on panas_afraid. Save results in dataframe "afraid".
+afraid <- treatment_effect(panas_afraid)
+
+# Run bootstrap analysis on panas_nervous. Save results in dataframe "nervous".
+nervous <- treatment_effect(panas_nervous)
+```
+
+# SAVE ALL ANALYSES INTO ONE DATAFRAME.
+```{r SAVE ALL ANALYSES INTO ONE DATAFRAME}
+# Save all bootstrap results in dataframe "figure6_data".
+figure6_data <- as.data.frame(rbind(active, attentive, alert, determined, inspired, hostile, ashamed, upset, afraid, nervous))
+
+# Reformat the "Emotion" column, so that all panas emotions contain only the emotion name (e.g., panas_active changes to active).
+figure6_data <- figure6_data %>% 
+  mutate(Emotion = sub("panas_", "", Emotion)) %>% # For all observations in the "Emotion" column, substitute "panas_" with a blank "". Effectively, this deletes "panas_" from each observation.
+  mutate(Emotion = str_to_title(Emotion)) # Capitalize the first letter of each emotion.
+
+# Add column "Color" which assigns color based on if the emotion is positive or negative.
+figure6_data <- cbind(figure6_data, Color = c("deepskyblue1", "deepskyblue1", "deepskyblue1", "deepskyblue1", "deepskyblue1", # Blue indicates positive emotions (active, attentive, alert, determined, inspired).
+            "orange1", "orange1", "orange1", "orange1", "orange1")) # Orange indicates negative emotions (hostile, ashamed, upset, afraid, nervous).
+
+# Convert beta and confidence interval columns to numeric.
+figure6_data <- figure6_data %>% 
+  mutate(Beta = as.numeric(Beta)) %>% 
+  mutate(CI_95_Lo = as.numeric(CI_95_Lo)) %>% 
+  mutate(CI_95_Hi = as.numeric(CI_95_Hi)) %>% 
+  mutate(CI_90_Lo = as.numeric(CI_90_Lo)) %>% 
+  mutate(CI_90_Hi = as.numeric(CI_90_Hi))
+```
+
+# FORMATTING FIGURE.
+```{r FORMATTING FIGURE}
+# Add the beta values and confidence intervals to the graph.
+figure6 <- ggplot(figure6_data, aes(x=Beta, y=as.factor(Emotion), color = Color)) + # Define dataset, x, y and color variables.
+  geom_point(size=8, show.legend = FALSE) + # Create points on the graph for the beta values. Define the size of the point as 8.
+  geom_errorbarh(aes(y=Emotion, xmin=CI_90_Lo, xmax=CI_90_Hi), # Create error bars for the 90% confidence interval.
+                 linewidth=2, height = 0, show.legend = FALSE) + # Define line width as 2 and height as 0 (this ensures that the error bar is just a line with no end bars).
+  geom_errorbarh(aes(y=Emotion, xmin=CI_95_Lo, xmax=CI_95_Hi), # Create error bars for the 95% confidence interval.
+                 linewidth=1, height=0, show.legend = FALSE, lineend = "round") # Define line width as 1 and height as 0 (this ensures that the error bar is just a line with no end bars).
+  
+# Add a vertical line at x=0.
+figure6 <- figure6 +
+  geom_vline(xintercept=0, linetype="dotted", size=2) # Define the line type as dotted, and size as 2.
+
+# Change the background colors of the graph.
+figure6 <- figure6 +
+  theme_minimal()
+
+# Format the y-axis.
+figure6 <- figure6 +
+  scale_y_discrete(limits = rev(c("Active", "Attentive", "Alert", "Determined", "Inspired", 
+                                  "Hostile", "Ashamed", "Upset", "Afraid", "Nervous"))) + # Specify order of the emotions.
+  ylab(" ") + # Label the y-axis with a blank " ".
+  theme(text = element_text(family="Verdana")) # Define the text font as "Verdana".
+
+# Format the x-axis.
+figure6 <- figure6 + 
+  scale_x_continuous(limits = c(-0.29, 0.29)) + # Limit the x-axis between the range of -0.29 to 0.29.
+  xlab("Treatment effect (in SDs)") + # Define the x-axis label as "Treatment effect (in SDs)".
+  theme(axis.title.x = element_text(size=18, face="bold"), # Define the text as size 18 and bold.
+        text = element_text(family="Verdana")) # Define the text font as "Verdana".
+
+# Add colors.
+figure6 <- figure6 + 
+  scale_color_identity() # Ensure the colors of the points/bars are in accordance with the colors stated in the dataframe.
+```
+
+# FINAL FIGURE.
+```{r FINAL FIGURE}
+print(figure6)
+ggsave('./emotions.png', units = 'in', width = 7, height = 3.5, dpi = 300)
+figure6
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,96 @@
+---
+title: "SI.Table.2"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# CALCULATE DESCRIPTIVE STATISTICS,
+```{r CALCULATE DESCRIPTIVE STATISTICS}
+# The function "descriptive_statistics" returns: mean, range, and standard deviation. The input is 1) the name that the variable will have in the final table (table_name) and 2) the name of the variable contained within the dataframe "data" (variable).
+descriptive_statistics <- function(table_name, variable){ # Define inputs as "table_name" and "variable".
+  
+  # Calculate the descriptive statistics of the variable of interest. Note: data[[variable]] is way to call a column within a dataframe.
+  mean <- mean(data[[variable]], na.rm=TRUE) # Calculate the mean of the variable, removing NAs from the calculation.
+  range <- range(data[[variable]], na.rm=TRUE) # Calculate the range of the variable, removing NAs from the calculation.
+  sd <- sd(data[[variable]], na.rm=TRUE) # Calculate the standard deviation of the variable, removing NAs from the calculation.
+  
+  # Format the descriptive statistics.
+  mean <- round(mean, 2) # Round mean to two decimal places.
+  range <- paste0("[", range[1], ",", range[2], "]") # Organize range so that it's in the format: [min, max].
+  sd <- round(sd, 2) # Round standard deviation to two decimal places.
+  
+  # Bind the descriptive statistics together into one dataframe.
+  return(as.data.frame(cbind(Variable = table_name, Mean = mean, `Observed range` = range, `Std. Dev.` = sd)))} # Bind the descriptive statistics together into a dataframe, specifying column names (e.g., the column "Observed range" contains the range statistics).
+
+# Run the descriptive_statistics function on the variables: age, panas, panas negative, panas positive, platform perception, perception of other users, post-treatment affective polarization, pre-treatment affective polarization, pre-treatment intellectual humility, post-treatment intellectual humility, and social media use.
+# Age.
+Age <- descriptive_statistics("Age", "age") # table_name = "Age", variable = age.
+
+# PANAS.
+PANAS <- descriptive_statistics("PANAS", "panas") # table_name = "PANAS", variable = panas.
+
+# PANAS Negative.
+PANAS_Negative <- descriptive_statistics("\\quad PANAS Negative", "panas_neg") # table_name = "PANAS Negative", variable = panas_neg.
+
+# PANAS Positive.
+PANAS_Positive <- descriptive_statistics("\\quad PANAS Positive", "panas_pos") # table_name = "PANAS Positive", variable = panas_pos.
+
+# Platform perception.
+Platform_perception <- descriptive_statistics("Platform perception", "platforms") # table_name = "Platform perception", variable = platforms.
+
+# Perception of other users.
+Users_perception <- descriptive_statistics("Perception of other users", "users") # table_name = "Perception of other users", variable = users.
+
+# Affective polarization - Post-treatment.
+Posttreat_AP <- descriptive_statistics("\\quad Posttreat AP (Ingroup - outgroup)", "post_affective_polarization") # table_name = "Posttreat AP (Ingroup - outgroup)", variable = post_affective_polarization.
+
+# Affective polarization - Pre-treatment.
+Pretreat_AP <- descriptive_statistics("\\quad Pretreat AP (Ingroup - outgroup)", "pre_affective_polarization") # table_name = "Pretreat AP (Ingroup - outgroup)", variable = pre_affective_polarization.
+
+# Pre-treatment intellectual humility.
+Pretreat_IH <- descriptive_statistics("Pretreat IH", "pre_ih") # table_name = "Pretreat IH", variable = pre_ih.
+
+# Post-treatment intellectual humility.
+Posttreat_IH <- descriptive_statistics("Posttreat IH", "post_ih") # table_name = "Posttreat IH", variable = post_ih.
+
+# Social media use.
+Social_media_use <- descriptive_statistics("Social Media Use", "social_media_sum") # table_name = "Social Media Use", variable = social_media_sum.
+```
+
+# FORMAT TABLE.
+```{r FORMAT TABLE}
+# Add a subsection title "Affective polarization (AP)" to Posttreat_AP.
+Posttreat_AP <- Posttreat_AP %>% 
+  add_row(Variable = "Affective polarization (AP)", `Mean` = " ", `Observed range` = " ", `Std. Dev.` = " ", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+
+# Add a subsection title "Intellectual humility (IH)" to Pretreat_IH.
+Pretreat_IH <- Pretreat_IH %>% 
+  add_row(Variable = "Intellectual humility (IH)", `Mean` = " ", `Observed range` = " ", `Std. Dev.` = " ", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+
+# Bind the dataframes (Age, PANAS, PANAS_Negative, PANAS_Positive, Platform_perception, Users_perception, Posttreat_AP, Pretreat_AP, Pretreat_IH, Posttreat_IH, Social_media_use) into one dataframe called "table2".
+table2 <- rbind(Age, PANAS, PANAS_Negative, PANAS_Positive, Platform_perception, Users_perception, Posttreat_AP, Pretreat_AP, Pretreat_IH, Posttreat_IH, Social_media_use)
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table2)
+
+stargazer::stargazer(table2, summary=FALSE, rownames = FALSE)
+```

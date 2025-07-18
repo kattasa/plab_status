@@ -1,0 +1,347 @@
+---
+title: "SI.Figure.4"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(stringr)
+library(extrafont)
+loadfonts(device = "win")
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "perspective_scores" which contains Perspective API scores for text written by participants.
+perspective_scores <- read_csv('../Data/timestamped_perspective_scores.csv')
+
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# STANDARDIZE VARIABLES.
+```{r STANDARDIZE VARIABLES}
+# Standardize curiosity scores.
+perspective_scores <- perspective_scores %>% 
+  mutate(CURIOSITY_EXPERIMENTAL = scale(CURIOSITY_EXPERIMENTAL))
+
+# Standardize respect scores.
+perspective_scores <- perspective_scores %>% 
+  mutate(RESPECT_EXPERIMENTAL = scale(RESPECT_EXPERIMENTAL))
+
+# Standardize nuance scores.
+perspective_scores <- perspective_scores %>% 
+  mutate(NUANCE_EXPERIMENTAL = scale(NUANCE_EXPERIMENTAL))
+```
+
+# TRANSFORM DATA.
+```{r TRANSFORM DATA}
+# The dataframe "data" contains the experimental condition that each participant was assigned to (treatment, control). Classify participants in the "perspective_scores" dataframe based on the experimental condition they were assigned to in data. 
+perspective_scores <- perspective_scores %>%
+  left_join(data %>% # Join data to perspective_scores.
+              dplyr::select(participant_code, condition), # Select the participant_code and condition columns from data.
+              by = c('participantCode' = 'participant_code')) # Match the observations in perspective_scores and data by participant codes.
+
+# Create column "linguistic_ih" which averages curiosity, respect, and nuance scores.
+perspective_scores <- perspective_scores %>% 
+  rowwise() %>% # Calculate the average for each row (1 row = 1 participant).
+  mutate(linguistic_ih = mean(c(CURIOSITY_EXPERIMENTAL, RESPECT_EXPERIMENTAL, NUANCE_EXPERIMENTAL))) # Calculate the mean of curiosity, respect, and nuance scores.
+```
+
+# CREATE DATAFRAMES FOR EACH ABLATION THRESHOLD.
+```{r CREATE DATAFRAMES FOR EACH ABLATION THRESHOLD}
+# Create dataframe "time_0", which includes any posts made on or after 0 minutes.
+time_0 <- as.data.frame(subset(perspective_scores, relative_time >= 0)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 0 minutes.
+
+# Create dataframe "time_0.5", which includes any posts made on or after 0.5 minutes.
+time_0.5 <- as.data.frame(subset(perspective_scores, relative_time >= 0.5)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 0.5 minutes.
+
+# Create dataframe "time_1", which includes any posts made on or after 1 minute.
+time_1 <- as.data.frame(subset(perspective_scores, relative_time >= 1)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 1 minute.
+
+# Create dataframe "time_1.5", which includes any posts made on or after 1.5 minutes.
+time_1.5 <- as.data.frame(subset(perspective_scores, relative_time >= 1.5)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 1.5 minutes.
+
+# Create dataframe "time_2", which includes any posts made on or after 2 minutes.
+time_2 <- as.data.frame(subset(perspective_scores, relative_time >= 2)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 2 minutes.
+
+# Create dataframe "time_2.5", which includes any posts made on or after 2.5 minutes.
+time_2.5 <- as.data.frame(subset(perspective_scores, relative_time >= 2.5)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 2.5 minutes.
+
+# Create dataframe "time_3", which includes any posts made on or after 3 minutes.
+time_3 <- as.data.frame(subset(perspective_scores, relative_time >= 3)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 3 minutes.
+
+# Create dataframe "time_3.5", which includes any posts made on or after 3.5 minutes.
+time_3.5 <- as.data.frame(subset(perspective_scores, relative_time >= 3.5)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 3.5 minutes.
+
+# Create dataframe "time_4", which includes any posts made on or after 4 minutes.
+time_4 <- as.data.frame(subset(perspective_scores, relative_time >= 4)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 4 minutes.
+
+# Create dataframe "time_4.5", which includes any posts made on or after 4.5 minutes.
+time_4.5 <- as.data.frame(subset(perspective_scores, relative_time >= 4.5)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 4.5 minutes.
+
+# Create dataframe "time_5", which includes any posts made on or after 5 minutes.
+time_5 <- as.data.frame(subset(perspective_scores, relative_time >= 5)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 5 minutes.
+
+# Create dataframe "time_5.5", which includes any posts made on or after 5.5 minutes.
+time_5.5 <- as.data.frame(subset(perspective_scores, relative_time >= 5.5)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 5.5 minutes.
+
+# Create dataframe "time_6", which includes any posts made on or after 6 minutes.
+time_6 <- as.data.frame(subset(perspective_scores, relative_time >= 6)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 6 minutes.
+
+# Create dataframe "time_6.5", which includes any posts made on or after 6.5 minutes.
+time_6.5 <- as.data.frame(subset(perspective_scores, relative_time >= 6.5)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 6.5 minutes.
+
+# Create dataframe "time_7", which includes any posts made on or after 7 minutes.
+time_7 <- as.data.frame(subset(perspective_scores, relative_time >= 7)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 7 minutes.
+
+# Create dataframe "time_7.5", which includes any posts made on or after 7.5 minutes.
+time_7.5 <- as.data.frame(subset(perspective_scores, relative_time >= 7.5)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 7.5 minutes.
+
+# Create dataframe "time_8", which includes any posts made on or after 8 minutes.
+time_8 <- as.data.frame(subset(perspective_scores, relative_time >= 8)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 8 minutes.
+
+# Create dataframe "time_8.5", which includes any posts made on or after 8.5 minutes.
+time_8.5 <- as.data.frame(subset(perspective_scores, relative_time >= 8.5)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 8.5 minutes.
+
+# Create dataframe "time_9", which includes any posts made on or after 9 minutes.
+time_9 <- as.data.frame(subset(perspective_scores, relative_time >= 9)) # Subset the "perspective_scores" dataframe, so that the relative time of posting (relative_time) is greater or equal to 9 minutes.
+```
+
+# CREATE FUNCTION TO CALCULATE THE BOOTSTRAP ANALYSIS.
+```{r CREATE FUNCTION TO CALCULATE THE BOOTSTRAP ANALYSIS}
+# Treatment effects will be re-calculated for each ablation threshold. Create a function "treatment_effect" which calculates the treatment effect for a given ablation threshold.
+treatment_effect <- function(ablation_threshold){ # Input ablation threshold dataframe (e.g. time_0.5).
+
+  # Set seed for analysis.
+  set.seed(8675309)
+  
+  # Set the number of bootstrap samples.
+  n_boots <- 5000
+  
+  # Calculate the mean "linguistic_ih" score for participants in the treatment condition.
+  mean_treatment <- mean(ablation_threshold %>%
+                         filter(condition == "treat") %>% # Within the ablation_threshold dataframe, filter for participants in the treatment condition.
+                         pull("linguistic_ih")) # Calculate the mean of the "linguistic_ih" column.
+                            
+  # Calculate the mean "linguistic_ih" score for participants in the control condition.
+  mean_control <- mean(ablation_threshold %>% 
+                         filter(condition == "control") %>% # Within the ablation_threshold dataframe, filter for participants in the control condition.
+                         pull("linguistic_ih")) # Calculate the mean of the "linguistic_ih" column.
+    
+  # Calculate the difference "beta" between the treatment and control means.
+  beta <- mean_treatment - mean_control
+  
+  # Bootstrapping.
+  boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+      boot <- ablation_threshold %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the ablation_threshold dataframe with replacement.
+      mean(boot %>% filter(condition == "treat") %>% pull("linguistic_ih")) - mean(boot %>% filter(condition == "control") %>% pull("linguistic_ih"))}) # Calculate the difference between mean treatment "linguistic_ih" and mean control "linguistic_ih".
+    
+  # Calculate a 95% confidence interval for the bootstraps.
+  ci_95 <- quantile(boots, probs = c(0.025, 0.975)) # Save the 2.5th (lower bound) and 97.5th (upper bound) percentile of the bootstraps.
+  
+  # Save the 95% confidence interval lower (lo) and upper (hi) bounds. These will be used when creating Figure 4.
+  ci_95_lo <- c(round(ci_95[1], 4)) # Round to 4 digits.
+  ci_95_hi <- c(round(ci_95[2], 4)) # Round to 4 digits.
+    
+  # Return the ablation threshold, beta, and 95% confidence interval results.
+  return(as.data.frame(cbind(Threshold = substitute(ablation_threshold), Beta = beta, CI_95_Lo = ci_95_lo, CI_95_Hi = ci_95_hi)))}
+```
+
+# RUN BOOTSTRAP ANALYSIS.
+```{r RUN BOOTSTRAP ANALYSIS}
+# Run bootstrap analysis on ablation threshold 0. Save results in dataframe "time_0_ablation".
+time_0_ablation <- treatment_effect(time_0)
+
+# Run bootstrap analysis on ablation threshold 0.5. Save results in dataframe "time_0.5_ablation".
+time_0.5_ablation <- treatment_effect(time_0.5)
+
+# Run bootstrap analysis on ablation threshold 1. Save results in dataframe "time_1_ablation".
+time_1_ablation <- treatment_effect(time_1)
+
+# Run bootstrap analysis on ablation threshold 1.5. Save results in dataframe "time_1.5_ablation".
+time_1.5_ablation <- treatment_effect(time_1.5)
+
+# Run bootstrap analysis on ablation threshold 2. Save results in dataframe "time_2_ablation".
+time_2_ablation <- treatment_effect(time_2)
+
+# Run bootstrap analysis on ablation threshold 2.5. Save results in dataframe "time_2.5_ablation".
+time_2.5_ablation <- treatment_effect(time_2.5)
+
+# Run bootstrap analysis on ablation threshold 3. Save results in dataframe "time_3_ablation".
+time_3_ablation <- treatment_effect(time_3)
+
+# Run bootstrap analysis on ablation threshold 3.5. Save results in dataframe "time_3.5_ablation".
+time_3.5_ablation <- treatment_effect(time_3.5)
+
+# Run bootstrap analysis on ablation threshold 4. Save results in dataframe "time_4_ablation".
+time_4_ablation <- treatment_effect(time_4)
+
+# Run bootstrap analysis on ablation threshold 4.5. Save results in dataframe "time_4.5_ablation".
+time_4.5_ablation <- treatment_effect(time_4.5)
+
+# Run bootstrap analysis on ablation threshold 5. Save results in dataframe "time_5_ablation".
+time_5_ablation <- treatment_effect(time_5)
+
+# Run bootstrap analysis on ablation threshold 5.5. Save results in dataframe "time_5.5_ablation".
+time_5.5_ablation <- treatment_effect(time_5.5)
+
+# Run bootstrap analysis on ablation threshold 6. Save results in dataframe "time_6_ablation".
+time_6_ablation <- treatment_effect(time_6)
+
+# Run bootstrap analysis on ablation threshold 6.5. Save results in dataframe "time_6.5_ablation".
+time_6.5_ablation <- treatment_effect(time_6.5)
+
+# Run bootstrap analysis on ablation threshold 7. Save results in dataframe "time_7_ablation".
+time_7_ablation <- treatment_effect(time_7)
+
+# Run bootstrap analysis on ablation threshold 7.5. Save results in dataframe "time_7.5_ablation".
+time_7.5_ablation <- treatment_effect(time_7.5)
+
+# Run bootstrap analysis on ablation threshold 8. Save results in dataframe "time_8_ablation".
+time_8_ablation <- treatment_effect(time_8)
+
+# Run bootstrap analysis on ablation threshold 8.5. Save results in dataframe "time_8.5_ablation".
+time_8.5_ablation <- treatment_effect(time_8.5)
+
+# Run bootstrap analysis on ablation threshold 9. Save results in dataframe "time_9_ablation".
+time_9_ablation <- treatment_effect(time_9)
+```
+
+# SAVE ALL ANALYSES INTO ONE DATAFRAME.
+```{r SAVE ALL ANALYSES INTO ONE DATAFRAME}
+# Save all analyses into dataframe "figure4_data".
+figure4_data <- rbind(time_0_ablation, time_0.5_ablation, time_1_ablation, time_1.5_ablation, time_2_ablation, time_2.5_ablation, time_3_ablation, time_3.5_ablation, time_4_ablation, time_4.5_ablation, time_5_ablation, time_5.5_ablation, time_6_ablation, time_6.5_ablation, time_7_ablation, time_7.5_ablation, time_8_ablation, time_8.5_ablation, time_9_ablation)
+
+# Reformat the "Threshold" column, so that all ablation thresholds contain only the threshold number (e.g., time_0 changes to 0).
+figure4_data <- figure4_data %>% 
+  mutate(Threshold = sub("time_", "", Threshold)) # For all observations in the "Threshold" column, substitute "time_" with a blank "". Effectively, this deletes "time_" from each observation.
+
+# Save each column as a numeric variable.
+figure4_data <- figure4_data %>% 
+  mutate(Threshold = as.numeric(Threshold)) %>% # Save the "Threshold" column as numeric.
+  mutate(Beta = as.numeric(Beta)) %>% # Save the "Beta" column as numeric.
+  mutate(CI_95_Lo = as.numeric(CI_95_Lo)) %>% # Save the "CI_95_Lo" column as numeric.
+  mutate(CI_95_Hi = as.numeric(CI_95_Hi)) # Save the "CI_95_Hi" column as numeric.
+```
+
+# FORMAT FIGURE.
+```{r FORMAT FIGURE}
+# Add the linguistic humility beta values to the graph.
+figure4 <- ggplot(figure4_data, aes(x=Threshold, y=Beta)) + # Define dataframe, x, and y variables.
+  geom_point(size=8) # Create points on the graph for the beta values. Define the size of the point as 8.
+
+# Add the 95% confidence intervals to the graph.
+figure4 <- figure4 +
+  geom_linerange(aes(x=Threshold, y=Beta, ymin=CI_95_Lo, ymax=CI_95_Hi), # Create error bars for the 95% confidence interval.
+                 linewidth=2, lineend = "round")  # Define line width as 2, and the line end shape as round.
+ 
+# Add a line that connects all of the beta values.
+figure4 <- figure4 +
+  geom_line(linewidth=2) # Define line width as 2.
+
+# Add a horizontal line at y=0.
+figure4 <- figure4 +
+  geom_hline(yintercept=0, linetype = "dashed", linewidth = 2) # Define the line as dashed, with a line width of 2.
+
+# Change background.
+figure4 <- figure4 +
+  theme_classic()
+
+# Format the x-axis.
+figure4 <- figure4 +
+  scale_x_continuous(breaks = c(0, 2 , 4, 6, 8)) + # Define breaks in the x-axis as 0, 2, 4, 6, 8.
+  xlab("Ablation Threshold (in Minutes)") + # Label the x-axis.
+  theme(axis.title.x = element_text(size = 22, face = "bold"), # Define the x-axis title as font size 22 with bold text.
+        axis.text.x = element_text(size = 16), # Define the x-axis break labels as font size 16.
+        text = element_text(family="Verdana"), # Define the font as "Verdana".
+        axis.ticks.x = element_blank()) # Remove the tick marks from the x-axis.
+
+# Format the y-axis.
+figure4 <- figure4 +
+  scale_y_continuous(breaks = c(-0.2, -0.1 , 0.0, 0.1, 0.2, 0.3, 0.4)) + # Define the breaks in the y-axis as -0.2, -0.1 , 0.0, 0.1, 0.2, 0.3, 0.4.
+  ylab("Treatment Effect (in SDs)")+ # Label the y-axis.
+  theme(axis.title.y = element_text(size = 22, face = "bold"), # Define the y-axis title as font size 22 with bold text.
+        axis.text.y = element_text(size = 16), # Define the y-axis break labels as font size 16.
+        text = element_text(family="Verdana"), # Define the font as "Verdana".
+        axis.ticks.y = element_blank()) # Remove the tick marks from the y-axis.
+```
+
+# FINAL FIGURE.
+```{r FINAL FIGURE}
+print(figure4)
+
+ggsave('./ablation.png', width = 15, height = 7.5, units = 'in')
+figure4
+dev.off()
+```
+
+# CALCULATE N FOR EACH ABLATION THRESHOLD.
+```{r CALCULATE N FOR EACH ABLATION THRESHOLD}
+# N for ablation threshold 0.
+length(unique(time_0$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 0.5.
+length(unique(time_0.5$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 1.
+length(unique(time_1$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 1.5.
+length(unique(time_1.5$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 2.
+length(unique(time_2$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 2.5.
+length(unique(time_2.5$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 3.
+length(unique(time_3$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 3.5.
+length(unique(time_3.5$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 4.
+length(unique(time_4$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 4.5.
+length(unique(time_4.5$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 5.
+length(unique(time_5$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 5.5.
+length(unique(time_5.5$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 6.
+length(unique(time_6$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 6.5.
+length(unique(time_6.5$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 7.
+length(unique(time_7$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 7.5.
+length(unique(time_7.5$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 8.
+length(unique(time_8$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 8.5.
+length(unique(time_8.5$participantCode)) # Calculate the number of unique participant codes.
+
+# N for ablation threshold 9.
+length(unique(time_9$participantCode)) # Calculate the number of unique participant codes.
+```

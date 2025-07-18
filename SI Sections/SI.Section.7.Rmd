@@ -1,0 +1,470 @@
+---
+title: "SI.Section.7"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list=ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "intake" which contains cleaned participant intake survey data.
+intake <- read_csv('../Data/intake_cleaned.csv') # Read csv data file.
+
+# Create dataframe "pretreat" which contains cleaned participant pre-treatment survey data.
+pretreat <- read_csv('../Data/pretreat_cleaned.csv') # Read csv data file.
+
+# Create dataframe "posttreat" which contains cleaned participant post-treatment survey data.
+posttreat <- read_csv('../Data/posttreat_cleaned.csv') # Read csv data file.
+
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+
+# Create dataframe "data_with_pure_controls" which contains cleaned participant data with pure controls.
+data_with_pure_controls <- read_csv('../Data/data_with_pure_control_cleaned.csv') # Read csv data file.
+```
+
+# INTAKE ATTRITION.
+```{r INTAKE ATTRITION}
+# Calculate the number of participants who started the intake survey. Save as "start_intake".
+start_intake <- length(unique(na.omit(intake$participant_code))) + sum(is.na(intake$participant_code)) # Add the number of unique participant codes and the number of participant codes = NA. participant code = NA means a participant started, but did not finish, the intake survey.
+
+# Calculate the number of participants who finished the intake survey. Save as "intake_completes".
+intake_completes <- intake %>%
+  filter(!is.na(participant_code)) %>% # If a participant did not finish the intake survey, then their participant code = NA. Filter out the rows with participant code = NA (!is.na).
+  summarise(length(unique(participant_code))) # Calculate the number of unique participant codes.
+
+# Calculate the number of participants who did not finish the intake survey.
+intake_drops <- sum(is.na(intake$participant_code)) # If a participant did not finish the intake survey, then their participant code = NA. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who live outside the US. Save as "lives_outside_us".
+lives_outside_us <- intake %>% 
+  filter(state == "I do not reside in the United States") %>% # Filter for the participants who stated that they do not reside in the United States.
+  summarise(sum(is.na(participant_code))) # If a participant stated that they do not reside in the United States, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who did not consent. Save as "did_not_consent".
+did_not_consent <- intake %>%
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'No, I do NOT consent') %>% # Filter for participants who stated that they did not consent.
+  summarise(sum(is.na(participant_code))) # If a participant stated that they did not consent, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who claimed to use a non-existent platform (JiveHive). Save as "use_fake_platform".
+use_fake_platform <- intake %>%
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'Yes, I consent') %>% # Filter for participants who consented.
+  filter((platforms_jive == 2) | (platforms_jive == 1) | is.na(platforms_jive)) %>% # Filter for participants who indicated that they used Jive some (= 1) or a lot (= 2), or did not answer the question (is.na).
+  summarise(sum(is.na(participant_code))) # If a participant indicated that they used Jive some (= 1) or a lot (= 2), or did not answer the question, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who are under the age of 18. Save as "under_18".
+under_18 <- intake %>% 
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'Yes, I consent') %>% # Filter for participants who consented.
+  filter(platforms_jive == 0) %>% # Filter for participants who do not use Jive.
+  filter(age < 18 | is.na(age)) %>% # Filter for participants who are younger than 18 (< 18), or did not answer the question (is.na).
+  summarise(sum(is.na(participant_code))) # If a participant is younger than 18 (< 18), or did not answer the question, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who use a device that is not Android or iPhone. Save as "do_not_use_android_iphone".
+do_not_use_android_iphone <- intake %>%
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'Yes, I consent') %>% # Filter for participants who consented.
+  filter(platforms_jive == 0) %>% # Filter for participants who do not use Jive.
+  filter(age >= 18) %>% # Filter for participants who are 18 or older.
+  filter(device == "Something else" | is.na(device)) %>% # Filter for participants who indicated their device is not an Android/iPhone (Something else) or did not answer the question (is.na).
+  summarise(sum(is.na(participant_code))) # If a participant indicated their device is not an Android/iPhone or did not answer the question, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who were unwilling to download the app. Save as "did_not_download".
+did_not_download <- intake %>%
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'Yes, I consent') %>% # Filter for participants who consented.
+  filter(platforms_jive == 0) %>% # Filter for participants who do not use Jive.
+  filter(age >= 18) %>% # Filter for participants who are 18 or older.
+  filter((device == "Android") | (device == "Apple iPhone")) %>% # Filter for participants who use an Android or Apple iPhone
+  filter((download_apple == 'No, I am NOT') | (download_android == 'No, I am NOT')) %>% # Filter for participants who had an Apple iPhone or Android and did not want to download the app (No, I am NOT).
+  summarise(sum(is.na(participant_code))) # If a participant did not want to download the app, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who failed the "3" attention check. Save as "failed_attention_check".
+failed_attention_check <- intake %>%
+  filter((state != "I do not reside in the United States") | is.na(state)) %>% # Filter for participants who reside in the United States.
+  filter(Consent == 'Yes, I consent') %>%  # Filter for participants who consented.
+  filter(platforms_jive == 0) %>% # Filter for participants who do not use Jive.
+  filter(age >= 18) %>% # Filter for participants who are 18 or older.
+  filter((device == "Android") | (device == "Apple iPhone")) %>% # Filter for participants who use an Android or Apple iPhone.
+  filter((download_apple == 'Yes, I am') | (download_android == 'Yes, I am')) %>% # Filter for participants who downloaded the app.
+  filter(screen_image != 3.0 | is.na(screen_image)) %>% # Filter for participants who did not write the number 3, or did not answer the question.
+  summarise(sum(is.na(participant_code))) # If a participant did not write the number 3, or did not answer the question, then they were given an NA value for a participant code. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who dropped due to forced attrition. Save as "forced_attrition".
+forced_attrition <- lives_outside_us + did_not_consent + use_fake_platform + under_18 + do_not_use_android_iphone + did_not_download + failed_attention_check # Add the number of participants who live outside the US, did not consent, claimed to use a fake platform, are under the age of 18, do not use an Android/iPhone, did not download the app, and failed the attention check. These are instances of forced attrition.
+
+# Calculate the number of participants who attrited voluntarily. Save as "voluntary_attrition".
+voluntary_attrition <- start_intake - intake_completes - forced_attrition # If a participant dropped between starting and completing the intake survey (start_intake = intake_completes), and also did not drop due to forced attrition, then they voluntarily attrited.
+
+# Print intake attrition results.
+print(paste("Started survey =", start_intake))
+print(paste("Dropped during survey =", intake_drops))
+print(paste("Attrited voluntarily =", voluntary_attrition))
+print(paste("Forced to exit study =", forced_attrition))
+print(paste("Did not consent =", did_not_consent))
+print(paste("Claimed to use fake platform =", use_fake_platform))
+print(paste("Under 18 =", under_18))
+print(paste("Did not have an Android/iPhone =", do_not_use_android_iphone))
+print(paste("Unwilling to download app =", did_not_download))
+print(paste("Failed attention check =", failed_attention_check))
+```
+
+# ATTRITION DURING DOWNLOAD.
+```{r ATTRITION DURING DOWNLOAD}
+# Calculate the number of participants who dropped during download. Save as "download_drops".
+download_drops <- intake %>% 
+  filter(!is.na(participant_code)) %>% # If participant code = NA, the participant did not finish the intake survey.
+  mutate(started_pretreat = participant_code %in% pretreat$participant_code) %>%  # If a participant code in intake is contained in pretreat, then assign a TRUE value. Otherwise, assign a FALSE value.
+  summarise(sum(started_pretreat == FALSE)) # Count the number of participants who dropped during download (started_pretreat == FALSE).
+
+# Print attrition during download result.
+print(paste("Dropped during download =", download_drops))
+```
+
+# LOGISTIC REGRESSION ON SOCIAL MEDIA USE AND INTAKE SURVEY COMPLETION.
+```{r LOGISTIC REGRESSION ON SOCIAL MEDIA USE AND INTAKE SURVEY COMPLETION}
+# Note: For complete list of logistic regression outputs, see "SI.Table.11.Rmd".
+
+# Create column "finished_intake" which classifies participants as finishing or not finishing the intake survey.
+intake$finished_intake <- !is.na(intake$participant_code) # If a participant has participant code = NA, that means they did not finish the intake survey. Assign a FALSE value. If a participant doesn't have participant code = NA (!is.na), that means they did finish the intake survey. Assign a TRUE value.
+
+# Drop NA values from the social_media_high column (which contains the variable of interest: social media use).
+intake <- intake[!is.na(intake$social_media_high),] # Keep rows which do not have an NA value (!is.na) in the social_media_high column .
+
+# Run a logistic regression investigating if social media use affects whether or not participants finished the intake survey.
+social_media_logistic_regression <- glm(formula = finished_intake ~ social_media_high, # Effect of social_media_high on finished_intake.
+                                        family = 'binomial', # Specify model type as binomial.
+                                        data = intake) # Specify data as the intake dataframe.
+
+# Save a summary of the logistic regression as "social_media_model_summary".
+social_media_model_summary <- summary(social_media_logistic_regression)
+
+# Save the logs-odd estimate as "social_media_estimate".
+social_media_estimate <- social_media_model_summary$coefficients[2]
+
+# Save the logs-odd estimate significance value as "social_media_p.value".
+social_media_p.value <- social_media_model_summary$coefficients[8]
+
+# Print the final results of the logistic regression.
+print(paste("log-odds estimate =", round(social_media_estimate, 2))); print(paste("p-value = ", round(social_media_p.value, 3))) # Round the estimate to two decimal places, and the p.value to three decimal places.
+```
+
+# PRETREAT, NEWSFEED ATTRITION.
+```{r PRETREAT, NEWSFEED ATTRITION}
+# Calculate the number of participants who did not finish the pre-treatment survey. Save as "pretreat_drops".
+pretreat_drops <- pretreat %>%
+  filter(is.na(`Q111_Page Submit`)) %>% # If a participant did not complete the pre-treatment survey, the variable "Q111_Page Submit" will = NA. Filter for the NAs (is.na).
+  summarise(length(unique(participant_code))) # Count the number of remaining unique participant codes.
+
+# Calculate the number of participants who started the newsfeed. Save as "newsfeed_starts".
+newsfeed_starts <- pretreat %>% # Participants who completed the pre-treatment survey also started the newsfeed. So, count the number of participants who finished the pre-treatment survey.
+  filter(!is.na(`Q111_Page Submit`)) %>% # If a participant did not complete the pre-treatment survey, the variable "Q111_Page Submit" will = NA. Filter out the NAs (!is.na).
+  summarise(length(unique(participant_code))) # Count the number of remaining unique participant codes.
+
+# Calculate the number of participants who dropped during newsfeed. Save as "newsfeed_drops".
+newsfeed_drops <- pretreat %>% 
+  distinct(participant_code, .keep_all = TRUE) %>% # Keep the first instance of each unique participant code.
+  filter(!is.na(`Q111_Page Submit`)) %>% # If a participant did not complete the pre-treatment survey, the variable "Q111_Page Submit" will = NA. Filter out the NAs (!is.na).
+  mutate(started_posttreat = participant_code %in% posttreat$participant_code) %>%  # If a participant code in pretreat is contained in posttreat, then assign a TRUE value. Otherwise, assign a FALSE value.
+  summarise(sum(started_posttreat == FALSE)) # Count the number of participants who dropped during newsfeed (started_posttreat == FALSE).
+
+# Print pretreat and newsfeed attrition results.
+print(paste("Did not complete pretreat =", pretreat_drops))
+print(paste("Started newsfeed =", newsfeed_starts))
+print(paste("Dropped during newsfeed =", newsfeed_drops))
+```
+
+# CRASH ANALYSIS. 
+```{r CRASH ANALYSIS}
+############### INTAKE CRASH ANALYSIS ###############
+
+# Create fresh "intake" dataframe by re-reading in the intake_cleaned.csv file.
+intake <- read_csv('../Data/intake_cleaned.csv') # Read csv data file.
+
+# Assign a value (row number) to participant codes = NA. This is necessary for identifying specific participants later in the crash analysis.
+intake <- intake %>%
+  mutate(participant_code = ifelse(is.na(participant_code), row_number(), participant_code)) # If participant code = NA, then replace the NA value with the corresponding row number. Otherwise, use the existing participant code.
+
+# Part A: Create dataframe "start_intake" which contains participants who started the intake.
+start_intake <- intake # All participants in "intake" at least started the intake.
+
+# Part B: Create dataframe "intake_completes" which contains participants who finished the intake.
+intake_completes <- intake %>%
+  filter(nchar(participant_code) == 6) # Participants with a 6-character participant code finished the intake.
+
+# Part C: Identify participants who dropped during the intake. Save list in "intake_drops".
+intake_drops <- start_intake$participant_code[!start_intake$participant_code %in% intake_completes$participant_code] # Identify participant codes that are in start_intake but not (!) in intake_completes.
+
+# Part D: Identify which participants experienced a crash during the intake.
+# Create list of crash time starts and ends.
+crash_times <- tribble(
+  ~start, ~end,
+  '12/12/2023 11:25', '12/12/2023 11:27', # Crash started at '12/12/2023 11:25' and ended at '12/12/2023 11:27'.
+  '12/12/2023 11:31', '12/12/2023 11:33', # Crash started at '12/12/2023 11:31' and ended at '12/12/2023 11:33'.
+  '12/12/2023 11:36', '12/12/2023 11:38', # Crash started at '12/12/2023 11:36' and ended at '12/12/2023 11:38'.
+  '12/12/2023 11:42', '12/12/2023 11:44', # Crash started at '12/12/2023 11:42' and ended at '12/12/2023 11:44'.
+  '12/13/2023 14:50', '12/13/2023 14:50', # Crash started at '12/13/2023 14:50' and ended at '12/13/2023 14:50'.
+  '12/13/2023 14:56', '12/13/2023 14:58', # Crash started at '12/13/2023 14:56' and ended at '12/13/2023 14:58'.
+  '12/13/2023 15:14', '12/13/2023 15:16', # Crash started at '12/13/2023 15:14' and ended at '12/13/2023 15:16'.
+  '12/13/2023 15:17', '12/13/2023 15:19', # Crash started at '12/13/2023 15:17' and ended at '12/13/2023 15:19'.
+  '12/13/2023 15:22', '12/13/2023 15:24', # Crash started at '12/13/2023 15:22' and ended at '12/13/2023 15:24'.
+  '12/13/2023 15:24', '12/13/2023 15:26' # Crash started at '12/13/2023 15:24' and ended at '12/13/2023 15:26'.
+) %>%
+  mutate_all(.funs = ~lubridate::as_datetime(., format = '%m/%d/%Y %H:%M')) # Specify format of all crash times as: month/day/year hour:minute.
+
+# Reformat participant intake start and end times.
+intake <- intake %>%
+  mutate(StartDate = lubridate::as_datetime(StartDate, format = '%m/%d/%Y %H:%M')) %>% # Reformat the StartDate variable as: month/day/year hour:minute.
+  mutate(end_time = case_when(
+    !is.na(EndDate) ~ lubridate::as_datetime(EndDate, format = '%m/%d/%Y %H:%M'), # If a participant finished the intake survey (EndDate is not (!) NA), reformat the EndDate variable as: month/day/year hour:minute.
+    .default = StartDate + lubridate::dseconds(`Duration (in seconds)`))) # If there's no end time listed (EndDate = NA ), then add the amount of time spent on the survey (Duration (in seconds)) to the start time.
+
+# Create column "participated_during_crash". Start by assuming that participants did not participate during a crash (<- FALSE).
+intake$participated_during_crash <- FALSE
+
+# Classify participants as participating or not participating during a crash.
+for(i in 1:nrow(intake)){ # For each row in intake (1 row = 1 participant)...
+  participant_start <- intake$StartDate[i] # Create variable "participant_start" which contains participants' start times.
+  participant_end <- intake$end_time[i] # Create variable "participant_end" which contains participants' end times.
+
+  for(j in 1:nrow(crash_times)){ # For each row in the crash_times dataframe (1 row = 1 crash start/end)...
+    crash_start <- crash_times$start[j] # Create variable "crash_start" which contains crash start time.
+    crash_end <- crash_times$end[j] # Create variable "crash_end" which contains crash end time.
+
+    if((participant_start >= crash_start & participant_start <= crash_end) | (participant_end >= crash_start & participant_end <= crash_end)){ # If a participant's start time is in the crash window (between the crash start and crash end), OR if a participant's end time is in the crash window (between the crash start and crash end)...
+      intake$participated_during_crash[i] <- TRUE # ...then assign a TRUE value to participated_during_crash.
+      break}}} # Otherwise, keep the FALSE value in participated_during_crash.
+
+# Inspect who participated (TRUE) / did not participate (FALSE) during a crash.
+table(intake$participated_during_crash)
+
+# Part E: Identify participants who did not participate during a crash but dropped during the intake.
+not_in_crash_dropped_intake <- intake %>%
+  filter(participated_during_crash == FALSE) %>% # Filter for participants who did not participate during a crash.
+  mutate(dropped = participant_code %in% intake_drops) %>% # Identify participant codes that are in (TRUE) or not in (FALSE) the intake_drop participant code list.
+  summarise(sum(dropped == TRUE)) # Count the number of participants who dropped.
+
+# Part F: Identify participants who participated during a crash and dropped during the intake.
+in_crash_dropped_intake <- intake %>%
+  filter(participated_during_crash == TRUE) %>% # Filter for participants who participated during a crash.
+  mutate(dropped = participant_code %in% intake_drops) %>% # Identify participant codes that are in (TRUE) or not in (FALSE) the intake_drop participant code list.
+  summarise(sum(dropped == TRUE)) # Count the number of participants who dropped.
+
+# Part G: Calculate the percentage of participants who did not participate during a crash but dropped during the intake.
+not_in_crash_dropped_intake/sum(intake$participated_during_crash == FALSE) # Divide the number of participants who did not participate during a crash but dropped during the intake by the total number of participants who did not participate during a crash.
+
+# Part H: Calculate the percentage of participants who participated during a crash and dropped during the intake.
+in_crash_dropped_intake/sum(intake$participated_during_crash == TRUE) # Divide the number of participants who participated during a crash and dropped during the intake by the total number of participants who participated during a crash.
+
+############### NEWSFEED CRASH ANALYSIS ###############
+
+# Create fresh "pretreat" dataframe by re-reading in the pretreat_cleaned.csv file.
+pretreat <- read_csv('../Data/pretreat_cleaned.csv') # Read csv data file.
+
+# Part 1: Create dataframe "pretreat_completes" which includes participants who finished the pretreat survey.
+pretreat_completes <- pretreat %>%
+  filter(!is.na(`Q111_Page Submit`)) # If a participant did not complete the pre-treatment survey, the variable "Q111_Page Submit" will = NA. Filter out the NAs (!is.na).
+
+# Part 2: Create dataframe "started_posttreat" which includes participants who started the posttreat survey.
+started_posttreat <- posttreat # All participants in "posttreat" at least started the posttreat survey.
+
+# Part 3: Identify participants who dropped during the newsfeed (between completing the pretreat and starting the posttreat). Save as "newsfeed_drops".
+newsfeed_drops <- pretreat_completes$participant_code[!pretreat_completes$participant_code %in% started_posttreat$participant_code] # Identify participant codes that are in pretreat_completes but not (!) in started_posttreat.
+
+# Part 4: Identify which participants experienced a crash during the newsfeed (between starting the pre-treat and completing the post-treat).
+# Create dataframe "pre_and_post_data" which contains participant data (such as pretreat end time and posttreat start time) from the pretreat and posttreat dataframes.
+pre_and_post_data <- pretreat_completes %>%
+  left_join(started_posttreat, by = 'participant_code', suffix = c('_pre', '_post')) # Join the pretreat_completes dataframe to the started_posttreat dataframe, matching by participant code. Any columns with duplicate names will have "_post" added to the name if previously contained in the started_posttreat dataframe, and "_pre" added to the name if previously contained in the pretreat_completes dataframe.
+
+# Create list of crash time starts and ends.
+crash_times <- tribble(
+  ~start, ~end,
+  '12/12/2023 11:25', '12/12/2023 11:27', # Crash started at '12/12/2023 11:25' and ended at '12/12/2023 11:27'.
+  '12/12/2023 11:31', '12/12/2023 11:33', # Crash started at '12/12/2023 11:31' and ended at '12/12/2023 11:33'.
+  '12/12/2023 11:36', '12/12/2023 11:38', # Crash started at '12/12/2023 11:36' and ended at '12/12/2023 11:38'.
+  '12/12/2023 11:42', '12/12/2023 11:44', # Crash started at '12/12/2023 11:42' and ended at '12/12/2023 11:44'.
+  '12/13/2023 14:50', '12/13/2023 14:50', # Crash started at '12/13/2023 14:50' and ended at '12/13/2023 14:50'.
+  '12/13/2023 14:56', '12/13/2023 14:58', # Crash started at '12/13/2023 14:56' and ended at '12/13/2023 14:58'.
+  '12/13/2023 15:14', '12/13/2023 15:16', # Crash started at '12/13/2023 15:14' and ended at '12/13/2023 15:16'.
+  '12/13/2023 15:17', '12/13/2023 15:19', # Crash started at '12/13/2023 15:17' and ended at '12/13/2023 15:19'.
+  '12/13/2023 15:22', '12/13/2023 15:24', # Crash started at '12/13/2023 15:22' and ended at '12/13/2023 15:24'.
+  '12/13/2023 15:24', '12/13/2023 15:26' # Crash started at '12/13/2023 15:24' and ended at '12/13/2023 15:26'.
+) %>%
+  mutate_all(.funs = ~lubridate::as_datetime(., format = '%m/%d/%Y %H:%M')) # Specify format of all crash times as: month/day/year hour:minute.
+
+
+##############################CHANGE CODE STARTING HERE. PRE-END AND POST-START ARE NOT GOOD APPROXIMATIONS FOR NEWSFEED START/END.##############################
+
+# Reformat participant pretreat end times and posttreat start times.
+pre_and_post_data <- pre_and_post_data %>%
+  mutate(
+    # Format start times for the beginning of the pretreatment survey.
+    StartDate_pre = lubridate::as_datetime(StartDate_pre, format = '%m/%d/%Y %H:%M'),
+    StartDate_post = case_when(
+      # If participants started the posttreatment survey, format that time.
+      !is.na(StartDate_post) ~ lubridate::as_datetime(StartDate_post, format = '%m/%d/%Y %H:%M'),
+      # If they did not, assume it started 10 minutes after they finished the pretreatment survey.
+      # NOTE: the newsfeed was supposed to last 10 minutes, but this is an assumption we
+      # make because we do not have access to the exact time they left the newsfeed.
+      is.na(StartDate_post)  ~ StartDate_pre + lubridate::minutes(10)
+    ),
+    end_pre = case_when(
+      # If participants completed the pretreatment survey, format this time
+      !is.na(EndDate_pre) ~ lubridate::as_datetime(EndDate_pre, format = '%m/%d/%Y %H:%M'),
+      # If not, add the time spent on the pretreatment survey to the time they started it.
+      TRUE                ~ StartDate_pre + lubridate::dseconds(`Duration (in seconds)_pre`)
+    )
+  )
+
+# Create column "participated_during_crash". Start by assuming that participants did not participate during a crash (<- FALSE).
+pre_and_post_data$participated_during_crash <- FALSE
+
+# Classify participants as participating or not participating during a crash.
+# Note: The newsfeed "started" when the pretreat ends. The newsfeed "ended" when the posttreat starts.
+for(i in 1:nrow(pre_and_post_data)){ # For each row in pre_and_post_data (1 row = 1 participant)...
+  participant_start <- pre_and_post_data$end_pre[i] # Create variable "participant_start" which contains participants' newsfeed start times.
+  participant_end <- pre_and_post_data$StartDate_post[i] # Create variable "participant_end" which contains participants' newsfeed end times.
+
+  for(j in 1:nrow(crash_times)){ # For each row in the crash_times dataframe (1 row = 1 crash start/end)...
+    crash_start <- crash_times$start[j] # Create variable "crash_start" which contains crash start time.
+    crash_end <- crash_times$end[j] # Create variable "crash_end" which contains crash end time.
+
+    if((participant_start >= crash_start & participant_start <= crash_end) | (participant_end >= crash_start & participant_end <= crash_end)){ # If a participant's start time is in the crash window (between the crash start and crash end), OR if a participant's end time is in the crash window (between the crash start and crash end)...
+      pre_and_post_data$participated_during_crash[i] <- TRUE # ...then assign a TRUE value to participated_during_crash.
+      break}}} # Otherwise, keep the FALSE value in participated_during_crash.
+
+# Inspect who participated (TRUE) / did not participate (FALSE) during a crash.
+table(pre_and_post_data$participated_during_crash)
+
+# Part 5: Identify participants who did not participate during a crash but dropped during the newsfeed.
+not_in_crash_dropped_newsfeed <- pre_and_post_data %>%
+  filter(participated_during_crash == FALSE) %>% # Filter for participants who did not participate during a crash.
+  mutate(dropped = participant_code %in% newsfeed_drops) %>% # Identify participant codes that are in (TRUE) or not in (FALSE) the newsfeed_drops participant code list.
+  summarise(sum(dropped == TRUE)) # Count the number of participants who dropped.
+
+# Part 6: Identify participants who were in a crash and dropped during the newsfeed.
+in_crash_dropped_newsfeed <- pre_and_post_data %>%
+  filter(participated_during_crash == TRUE) %>% # Filter for participants who participated during a crash.
+  mutate(dropped = participant_code %in% newsfeed_drops) %>% # Identify participant codes that are in (TRUE) or not in (FALSE) the newsfeed_drops participant code list.
+  summarise(sum(dropped == TRUE)) # Count the number of participants who dropped.
+
+# Part 7: Calculate the percentage of participants who did not participate during a crash but dropped during the newsfeed
+not_in_crash_dropped_newsfeed/sum(pre_and_post_data$participated_during_crash == FALSE) # Divide the number of participants who did not participate during a crash but dropped during the newsfeed by the total number of participants who did not participate during a crash.
+
+# Part 8: Calculate the percentage of participants who participated during a crash and dropped during the newsfeed
+in_crash_dropped_newsfeed/sum(pre_and_post_data$participated_during_crash == TRUE) # Divide the number of participants participated during a crash and dropped during the newsfeed by the total number of participants who participated during a crash.
+
+###############OVERALL CRASH ATTRITION###############
+
+# Calculate the percentage of participants, overall, who were not in a crash but dropped.
+(not_in_crash_dropped_newsfeed + not_in_crash_dropped_intake) / (sum(intake$participated_during_crash == FALSE) + sum(pre_and_post_data$participated_during_crash == FALSE)) # Add the number of participants who were participated during a crash but dropped the intake + newsfeed and divide by the number of participants who did not participant during a crash in intake + newsfeed.
+
+# Calculate the percentage of participants, overall, who were in a crash and dropped.
+(in_crash_dropped_newsfeed + in_crash_dropped_intake) / (sum(intake$participated_during_crash == TRUE) + sum(pre_and_post_data$participated_during_crash == TRUE)) # Add the number of participants who participated during a crash and dropped the intake + newsfeed and divide by the number of participants who participated during a crash in intake + newsfeed.
+```
+
+# LOGISTIC REGRESSION ON POLITICAL IDENTITY AND NEWSFEED COMPLETION.
+```{r LOGISTIC REGRESSION ON POLITICAL IDENTITY AND NEWSFEED COMPLETION}
+# Note: For complete list of logistic regression outputs, see "SI.Table.11.Rmd".
+
+# Create fresh "intake" dataframe by re-reading in the intake_cleaned.csv file.
+intake <- read_csv('../Data/intake_cleaned.csv') # Read csv data file.
+
+# Create fresh "pretreat" dataframe by re-reading in the pretreat_cleaned.csv file.
+pretreat <- read_csv('../Data/pretreat_cleaned.csv') # Read csv data file.
+
+# Create fresh "posttreat" dataframe by re-reading in the posttreat_cleaned.csv file.
+posttreat <- read_csv('../Data/posttreat_cleaned.csv') # Read csv data file.
+
+# Create column "finished_newsfeed" which classifies participants as finishing or not finishing the newsfeed experiment.
+pretreat$finished_newsfeed <- (pretreat$participant_code %in% posttreat$participant_code) # If a participant completed the newsfeed experiment, then their participant code will appear in both the pre-treatment and post-treatment survey dataframes. Assign a TRUE value if the participant code is in both dataframes. Otherwise assign a FALSE value.
+
+# Join pid3 (which contains the variable of interest: political identity) to the pre-treatment survey dataframe.
+pretreat <- pretreat %>%
+  left_join(intake %>% dplyr::select(pid3, participant_code), by = 'participant_code') # Join the pid3 column from the intake survey dataframe to the pre-treatment survey dataframe, matching values by shared participant codes.
+
+# Drop NA values from the pid3 column .
+pretreat <- pretreat[!is.na(pretreat$pid3),] # Keep rows which do not have an NA value (!is.na) in the pid3 column.
+
+# Convert the pid3 column to a factor.
+pretreat$pid3 <- as.factor(pretreat$pid3)
+
+# Assign "Democrat" as the reference level "ref" for the logistic regression.
+ref <- 'Democrat' #levels(pretreat$pid3)[1]
+ 
+# Run a logistic regression investigating if political identity affects whether or not participants finished the newsfeed experiment.
+pid3_logistic_regression <- glm(formula = finished_newsfeed ~ pid3, # Effect of pid3 on finished_newsfeed.
+                                        family = 'binomial', # Specify model type as binomial.
+                                        data = pretreat) # Specify data as the pretreat dataframe.
+
+# Save a summary of the logistic regression as "social_media_model_summary".
+pid3_model_summary <- summary(pid3_logistic_regression)
+
+# Save the logs-odd estimate as "pid3_estimate".
+pid3_estimate <- pid3_model_summary$coefficients[2]
+
+# Save the logs-odd estimate significance value as "pid3_p.value".
+pid3_p.value <- pid3_model_summary$coefficients[14]
+
+# Print the final results of the logistic regression.
+print(paste("log-odds estimate =", round(pid3_estimate, 2))); print(paste("p-value = ", round(pid3_p.value, 3))) # Round the estimate to two decimal places, and the p.value to three decimal places.
+```
+
+# LOGISTIC REGRESSION ON POLITICAL IDEOLOGY AND NEWSFEED COMPLETION.
+```{r LOGISTIC REGRESSION ON POLITICAL IDEOLOGY AND NEWSFEED COMPLETION}
+# Note: For complete list of logistic regression outputs, see "SI.Table.11.Rmd".
+
+# Reload dataframe "pretreat" in order to reset the dataframe from the changes made in the political identity and newsfeed completion logistic regression.
+pretreat <- read_csv('../Data/pretreat_cleaned.csv') # Read csv data file.
+
+# Create column "finished_newsfeed" which classifies participants as finishing or not finishing the newsfeed experiment.
+pretreat$finished_newsfeed <- (pretreat$participant_code %in% posttreat$participant_code) # If a participant completed the newsfeed experiment, then their participant code will appear in both the pre-treatment and post-treatment survey dataframes. Assign a TRUE value if the participant code is in both dataframes. Otherwise assign a FALSE value.
+
+# Join ideo7 (which contains the variable of interest: political ideology) to the pre-treatment survey dataframe.
+pretreat <- pretreat %>%
+  left_join(intake %>% dplyr::select(c('ideo7', 'participant_code')), by = 'participant_code') # Join the ideo7 column from the intake survey dataframe to the pre-treatment survey dataframe, matching values by shared participant codes.
+
+# Drop NA values from the ideo7 column.
+pretreat <- pretreat[!is.na(pretreat$ideo7),] # Keep rows which do not have an NA value (!is.na) in the ideo7 column.
+
+# Convert the ideo7 column to a factor.
+pretreat$ideo7 <- as.factor(pretreat$ideo7)
+
+# Assign the first factor level of ideo7 as the reference level "ref" for the logistic regression.
+ref <- levels(pretreat$ideo7)[1]
+
+# Run a logistic regression investigating if political ideology affects whether or not participants finished the newsfeed experiment.
+ideo7_logistic_regression <- glm(formula = finished_newsfeed ~ ideo7, # Effect of ideo7 on finished_newsfeed.
+                                        family = 'binomial', # Specify model type as binomial.
+                                        data = pretreat) # Specify data as the pretreat dataframe.
+
+# Save a summary of the logistic regression as "ideo7_model_summary".
+ideo7_model_summary <- summary(ideo7_logistic_regression)
+
+# Save the logs-odd estimate as "ideo7_estimate".
+ideo7_estimate <- ideo7_model_summary$coefficients[2]
+
+# Save the logs-odd estimate significance value as "ideo7_p.value".
+ideo7_p.value <- ideo7_model_summary$coefficients[23]
+
+# Print the final results of the logistic regression.
+print(paste("log-odds estimate =", round(ideo7_estimate, 2))); print(paste("p-value = ", round(ideo7_p.value, 3))) # Round the estimate to two decimal places, and the p.value to three decimal places.
+```
+
+# FINAL SAMPLE EXPERIMENTAL CONDITIONS.
+```{r FINAL SAMPLE EXPERIMENTAL CONDITIONS}
+# Create a table which counts the amount of participants assigned to each experimental condition.
+table(data_with_pure_controls$condition)
+```

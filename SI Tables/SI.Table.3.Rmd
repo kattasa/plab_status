@@ -1,0 +1,183 @@
+---
+title: "SI.Table.3"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') #read csv data file.
+```
+
+# FORMAT DATA.
+```{r FORMAT DATA}
+# Convert pid7 from character values to numeric. Save as "pid7_numeric".
+data <- data %>%
+  mutate(pid7_numeric = case_match(pid7, # Select the column 'pid7'
+                                   'Strong Democrat' ~ -3, # If pid7 = 'Strong Democrat', assign the number -3.
+                                   'Weak Democrat' ~ -2, # If pid7 = 'Weak Democrat', assign the number -2.
+                                   'Lean Democrat' ~ -1, # If pid7 ='Lean Democrat', assign the number -1.
+                                   'Pure Independent' ~ 0, # If pid7 = 'Pure Independent', assign the number 0.
+                                   'Lean Republican' ~ 1, # If pid7 = 'Lean Republican', assign the number 1.
+                                   'Weak Republican' ~ 2, # If pid7 = 'Weak Republican', assign the number 2.
+                                   'Strong Republican' ~ 3, # If pid7 = 'Strong Republican', assign the number 3.
+                                   NA ~ NA)) # If pid7 = 'NA', keep the NA.
+```
+
+# CALCULATE SUMMARY STATISTICS.
+```{r CALCULATE SUMMARY STATISTICS}
+# The function "summary_statistics" returns: median, range, and the 25th and 75th percentile. The input is 1) the name that the variable will have in the final table (table_name) and 2) the name of the variable contained within the dataframe "data" (variable).
+summary_statistics <- function(table_name, variable){ # Define inputs as "table_name" and "variable".
+  
+  # Calculate the summary statistics of the variable of interest. Note: data[[variable]] is a way of calling a column within the dataframe.
+  median <- median(data[[variable]]) # Find the median of the variable.
+  range <- range(data[[variable]]) # Calculate the range of the variable.
+  percentile <- quantile(data[[variable]]) # Calculate quantiles of the variable.
+  
+  # Format the summary statistics.
+  range <- paste0("[", range[1], ",", range[2], "]") # Organize the range so that it's in the format: [min, max].
+  percentile <- paste0("[", percentile[2], ",", percentile[4], "]") # Select the 25th (percentile[2]) and 75th (percentile[4]) percentile. Organize the percentiles so that they are in the format [25th percentile, 75th percentile].
+  
+  # Bind the summary statistics together into one dataframe.
+  return(as.data.frame(cbind(Variable = table_name, Median = median, Range = range, `(25th, 75th)` = percentile)))} # Bind the summary statistics together into a dataframe, specifying column names (e.g., the column "Range" contains the range statistics).
+
+# Run the summary_statistics function on the variables: platform perception (engaging, exhausting, toxic), perception of other users (aggressive, polite, tolerant), social media use (facebook, instagram, tiktok, truth, x), party identity, pre-treatment gun control/immigration policy views, post-treatment gun control/immigration policy views, third order responses, future use, panas positive (active, alert, attentive, determined, inspired), panas negative (afraid, ashamed, hostile, nervous, upset).
+# Platform perception - engaging.
+Engaging <- summary_statistics("Engaging", "desc_platform_engaging") # table_name = "Engaging", variable = desc_platform_engaging.
+
+# Platform perception - exhausting.
+Exhausting <- summary_statistics("Exhausting", "desc_platform_exhausting") # table_name = "Exhausting", variable = desc_platform_exhausting.
+
+# Platform perception - toxic.
+Toxic <- summary_statistics("Toxic", "desc_platform_toxic") # table_name = "Toxic", variable = desc_platform_toxic.
+
+# Perception of other users - aggressive.
+Aggressive <- summary_statistics("Aggressive", "desc_users_aggressive") # table_name = "Aggressive", variable = desc_users_aggressive.
+
+# Perception of other users - polite.
+Polite <- summary_statistics("Polite", "desc_users_polite") # table_name = "Polite", variable = desc_users_polite.
+
+# Perception of other users - tolerant.
+Tolerant <- summary_statistics("Tolerant", "desc_users_tolerant") # table_name = "Tolerant", variable = desc_users_tolerant.
+
+# Social media use - Facebook.
+Facebook <- summary_statistics("Facebook", "platforms_fb") # table_name = "Facebook", variable = platforms_fb.
+
+# Social media use - Instagram.
+Instagram <- summary_statistics("Instagram", "platforms_insta") # table_name = "Instagram", variable = platforms_insta.
+
+# Social media use - TikTok.
+TikTok <- summary_statistics("TikTok", "platforms_tiktok") # table_name = "TikTok", variable = platforms_tiktok.
+
+# Social media use - Truth Social.
+Truth_Social <- summary_statistics("Truth Social ", "platforms_truth") # table_name = "Truth Social", variable = platforms_truth.
+
+# Social media use - X.
+X <- summary_statistics("X", "platforms_x") # table_name =  "X", variable = platforms_x.
+
+# Party Identity.
+Party_identity <- summary_statistics("Party Identity (7-point)", "pid7_numeric") # table_name = "Party Identity (7-point)", variable = pid7_numeric.
+
+# Pre-treatment policy views - gun control.
+Gun_control_pre <- summary_statistics("Gun Control", "pre_policy_gc") # table_name = "Gun Control", variable = pre_policy_gc.
+
+# Pre-treatment policy views - immigration.
+Immigration_pre <- summary_statistics("Immigration", "pre_policy_imm") # table_name = "Immigration", variable = pre_policy_imm.
+
+# Post-treatment policy views - gun control.
+Gun_control_post <- summary_statistics("Gun Control", "post_policy_1") # table_name = "Gun Control", variable = post_policy_1.
+
+# Post-treatment policy views - immigration.
+Immigration_post <- summary_statistics("Immigration", "post_policy_2") # table_name = "Immigration", variable = post_policy_2.
+
+# Third order.
+Third_order <- summary_statistics("Third order", "third_order") # table_name = "Third order", variable = third_order.
+
+# Future use.
+Future_use <- summary_statistics("Future Use", "future_use_numeric") # table_name = "Future Use", variable = future_use_numeric.
+
+# PANAS Positive - PANAS Active.
+PANAS_Active <- summary_statistics("PANAS Active", "panas_active") # table_name = "PANAS Active", variable = panas_active.
+
+# PANAS Positive - PANAS Alert.
+PANAS_Alert <- summary_statistics("PANAS Alert", "panas_alert") # table_name = "PANAS Alert", variable = panas_alert.
+
+# PANAS Positive - PANAS Attentive.
+PANAS_Attentive <- summary_statistics("PANAS Attentive", "panas_attentive") # table_name = "PANAS Attentive", variable = panas_attentive.
+
+# PANAS Positive - PANAS Determined.
+PANAS_Determined <- summary_statistics("PANAS Determined", "panas_determined") # table_name = "PANAS Determined", variable = panas_determined.
+
+# PANAS Positive - PANAS Inspired.
+PANAS_Inspired <- summary_statistics("PANAS Inspired", "panas_inspired") # table_name = "PANAS Inspired", variable = panas_inspired.
+
+# PANAS Negative - PANAS Afraid.
+PANAS_Afraid <- summary_statistics("PANAS Afraid", "panas_afraid") # table_name = "PANAS Afraid", variable = panas_afraid.
+
+# PANAS Negative - PANAS Ashamed.
+PANAS_Ashamed <- summary_statistics("PANAS Ashamed", "panas_ashamed") # table_name = "PANAS Ashamed", variable = panas_ashamed.
+
+# PANAS Negative - PANAS Hostile.
+PANAS_Hostile <- summary_statistics("PANAS Hostile", "panas_hostile") # table_name = "PANAS Hostile", variable = panas_hostile.
+
+# PANAS Negative - PANAS Nervous.
+PANAS_Nervous <- summary_statistics("PANAS Nervous", "panas_nervous") # table_name = "PANAS Nervous", variable = panas_nervous.
+
+# PANAS Negative - PANAS Upset.
+PANAS_Upset <- summary_statistics("PANAS Upset", "panas_upset") # table_name = "PANAS Upset", variable = panas_upset.
+```
+
+# FORMAT TABLE.
+```{r FORMAT TABLE}
+# Add subsection title "Platform perception" to Engaging dataframe.
+Engaging <- Engaging %>% 
+  add_row(Variable = "Platform perception", Median = " ", Range = " ", `(25th, 75th)` = " ", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+
+# Add subsection title "Perception of other users" to Aggressive dataframe.
+Aggressive <- Aggressive %>% 
+  add_row(Variable = "Perception of other users", Median = " ", Range = " ", `(25th, 75th)` = " ", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+
+# Add subsection title "Social Media Use" to Facebook dataframe.
+Facebook <- Facebook %>%
+  add_row(Variable = "Social Media Use", Median = " ", Range = " ", `(25th, 75th)` = " ", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+
+# Add subsection title "Pretreatment policy views" to Gun_control_pre dataframe.
+Gun_control_pre <- Gun_control_pre %>% 
+  add_row(Variable = "Pretreatment policy views", Median = " ", Range = " ", `(25th, 75th)` = " ", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+
+# Add subsection title "Posttreatment policy views" to Gun_control_post dataframe.
+Gun_control_post <- Gun_control_post %>% 
+  add_row(Variable = "Posttreatment policy views", Median = " ", Range = " ", `(25th, 75th)` = " ", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+
+# Add subsection title PANAS Positive" to PANAS_Active dataframe.
+PANAS_Active <- PANAS_Active %>% 
+  add_row(Variable = "PANAS Positive", Median = " ", Range = " ", `(25th, 75th)` = " ", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+ 
+# Add subsection title "PANAS Negative" to PANAS_Afraid dataframe.
+PANAS_Afraid <- PANAS_Afraid %>% 
+  add_row(Variable = "PANAS Negative", Median = " ", Range = " ", `(25th, 75th)` = " ", .before = 1) # Add a row at the beginning of the dataframe, which acts as a subsection title.
+  
+# Bind the dataframes into one dataframe called "table3".
+table3 <- rbind(Engaging, Exhausting, Toxic, Aggressive, Polite, Tolerant, Facebook, Instagram, TikTok, Truth_Social, X, Party_identity, Gun_control_pre, Immigration_pre, Gun_control_post, Immigration_post, Third_order, Future_use, PANAS_Active, PANAS_Alert, PANAS_Attentive, PANAS_Determined, PANAS_Inspired, PANAS_Afraid, PANAS_Ashamed, PANAS_Hostile, PANAS_Nervous, PANAS_Upset)
+
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table3)
+
+stargazer::stargazer(table3, summary = FALSE, row.names = FALSE)
+```
+

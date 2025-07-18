@@ -1,0 +1,37 @@
+---
+title: "SI.Section.8"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES. 
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# MANIPULATION CHECK.
+```{r MANIPULATION CHECK}
+# Calculate the proportion of participants in the treatment and control conditions who correctly responded to the manipulation check. A score of 1 indicates a correct answer, while a score of 0 indicates an incorrect answer.
+manipulation_check <- data %>%
+  group_by(condition) %>% # Group participants by experimental condition (treatment or control).
+  count(mc_correct) %>% # Count the number of participants within each condition who responded correctly (1) or incorrectly (0).
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of participants who responded correctly/incorrectly within each condition.
+
+# Print the proportion of participants within the treatment condition who correctly responded to the manipulation check.
+print(round(manipulation_check$proportion[manipulation_check$condition == "treat" & manipulation_check$mc_correct == 1], 0)) # Round proportion to 0 decimal places.
+
+# Print the proportion of participants within the control condition who correctly responded to the manipulation check.
+print(round(manipulation_check$proportion[manipulation_check$condition == "control" & manipulation_check$mc_correct == 1], 0)) # Round proportion to 0 decimal places.
+```

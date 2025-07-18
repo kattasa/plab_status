@@ -1,0 +1,254 @@
+---
+title: "SI.Section.13"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data_with_pure_control" which contains cleaned participant data with pure controls.
+data_with_pure_control <- read_csv('../Data/data_with_pure_control_cleaned.csv') # Read csv data file.
+
+# Create dataframe "linguistic_humility_data" which contains linguistic humility scores for all participants (including pure controls).
+linguistic_humility_data <- read_csv('../Data/timestamped_perspective_scores_all.csv')
+```
+
+# STANDARDIZE VARIABLES.
+```{r STANDARDIZE VARIABLES}
+# Standardize curiosity score in linguistic_humility_data.
+linguistic_humility_data <- linguistic_humility_data %>% 
+  mutate(CURIOSITY_EXPERIMENTAL = scale(CURIOSITY_EXPERIMENTAL))
+
+# Standardize respect score in linguistic_humility_data.
+linguistic_humility_data <- linguistic_humility_data %>% 
+  mutate(RESPECT_EXPERIMENTAL = scale(RESPECT_EXPERIMENTAL))
+
+# Standardize nuance score in linguistic_humility_data.
+linguistic_humility_data <- linguistic_humility_data %>% 
+  mutate(NUANCE_EXPERIMENTAL = scale(NUANCE_EXPERIMENTAL))
+
+# Standardize ih_engagement in data_with_pure_control.
+data_with_pure_control <- data_with_pure_control %>% 
+  mutate(ih_engagement = scale(ih_engagement))
+
+# Standardize delta_ih in data_with_pure_control.
+data_with_pure_control <- data_with_pure_control %>% 
+  mutate(delta_ih = scale(delta_ih))
+
+# Standardize delta_ih items 1-6 in data_with_pure_control.
+data_with_pure_control <- data_with_pure_control %>% 
+  mutate(delta_ih_1 = scale(delta_ih_1)) %>% # Item 1.
+  mutate(delta_ih_2 = scale(delta_ih_2)) %>% # Item 2.
+  mutate(delta_ih_3 = scale(delta_ih_3)) %>% # Item 3. 
+  mutate(delta_ih_4 = scale(delta_ih_4)) %>% # Item 4. 
+  mutate(delta_ih_5 = scale(delta_ih_5)) %>% # Item 5. 
+  mutate(delta_ih_6 = scale(delta_ih_6)) # Item 6. 
+  
+# Standardize panas_pos in data_with_pure_control.
+data_with_pure_control <- data_with_pure_control %>% 
+  mutate(panas_pos = scale(panas_pos))
+
+# Standardize panas_neg in data_with_pure_control.
+data_with_pure_control <- data_with_pure_control %>% 
+  mutate(panas_neg = scale(panas_neg))  
+
+# Standardize panas in data_with_pure_control.
+data_with_pure_control <- data_with_pure_control %>% 
+  mutate(panas = scale(panas))  
+
+# Standardize affective_polarization in data_with_pure_control.
+data_with_pure_control <- data_with_pure_control %>% 
+  mutate(affective_polarization = scale(affective_polarization))  
+
+# Standardize extremity_post_less_pre in data_with_pure_control.
+data_with_pure_control <- data_with_pure_control %>% 
+  mutate(extremity_post_less_pre = scale(extremity_post_less_pre))  
+```
+
+# SPECIFY "CONDITION" COLUMN FACTOR LEVEL.
+```{r SPECIFY "CONDITION" COLUMN FACTOR LEVEL}
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data_with_pure_control$condition <- factor(data_with_pure_control$condition, levels = c("treat", "control", "pure_control")) # Levels are now in the order of: treatment, control, pure_control.
+```
+
+# PURE CONTROL ARM ANALYSES - AUTHORING INTELLECTUALLY HUMBLE CONTENT.
+```{r PURE CONTROL ARM ANALYSES - AUTHORING INTELLECTUALLY HUMBLE CONTENT}
+# The dataframe "data_with_pure_control" contains the experimental arm that each participant was assigned to (treatment, control, pure control). Classify participants in the "linguistic_humility_data" dataframe based on the experimental arm they were assigned to in "data_with_pure_control". 
+linguistic_humility_data <- linguistic_humility_data %>%
+  left_join(data_with_pure_control %>% # Join the "data_with_pure_control" dataframe to the "linguistic_humility_data" dataframe.
+              select(participant_code, condition), # Select the participant_code and condition columns from data_with_pure_control.
+              by = c('participantCode' = 'participant_code')) # Match the observations in "linguistic_humility_data" and "data_with_pure_control" by participant codes (participantCode in linguistic_humility_data and participant_code in data_with_pure_control).
+
+# In the linguistic_humility_data dataframe, create column "linguistic_humility" which averages curiosity, respect, and nuance scores.
+linguistic_humility_data <- linguistic_humility_data %>% 
+  rowwise() %>% # Calculate the average for each row (1 row = 1 participant).
+  mutate(linguistic_humility = mean(c(CURIOSITY_EXPERIMENTAL, RESPECT_EXPERIMENTAL, NUANCE_EXPERIMENTAL))) # Calculate the mean of curiosity, respect, and nuance scores.
+
+# Specify factor order of the "condition" column in linguistic_humility_data.
+linguistic_humility_data$condition <- factor(linguistic_humility_data$condition, levels = c("treat", "control", "pure_control")) # Levels are now in the order of: treatment, control, pure_control.
+
+# Run an ANOVA, comparing intellectually humble authored content across the three conditions (treatment, control, pure control). Save as anova_linguistic_humility.
+anova_linguistic_humility <- summary(aov(data = linguistic_humility_data,
+                                         linguistic_humility ~ condition))
+
+# Print the p-value.
+print(anova_linguistic_humility[[1]][5])
+```
+
+# PURE CONTROL ARM ANALYSES - ENGAGMENT WITH INTELLECTUALLY HUMBLE CONTENT.
+```{r PURE CONTROL ARM ANALYSES - ENGAGMENT WITH INTELLECTUALLY HUMBLE CONTENT}
+# Run an ANOVA, comparing engagement with intellectually humble content across the three conditions (treatment, control, pure control). Save as anova_ih_engagement.
+anova_ih_engagement <- summary(aov(data = data_with_pure_control, 
+      ih_engagement ~ condition)) 
+
+# Print the p-value.
+print(anova_ih_engagement[[1]][5])
+```
+
+# PURE CONTROL ARM ANALYSES - SCORES ON SELF-REPORTED INTELLECTUAL HUMILITY SCALE.
+```{r PURE CONTROL ARM ANALYSES - SCORES ON SELF-REPORTED INTELLECTUAL HUMILITY SCALE}
+# Create dataframe "data_delta_ih" which excludes the participant who didn't answer all of the intellectual humility measures.
+data_delta_ih <- data_with_pure_control[data_with_pure_control$participant_code != "9paveb", ]
+
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data_delta_ih$condition <- factor(data_delta_ih$condition, levels = c("treat", "control", "pure_control")) # Levels are now in the order of: treatment, control, pure_control.
+
+# Run an ANOVA, comparing scores on a self-reported intellectual humility scale across the three conditions (treatment, control, pure control). Save as anova_delta_ih.
+anova_delta_ih <- summary(aov(data = data_delta_ih, 
+      delta_ih ~ condition)) 
+
+# Print the p-value.
+print(anova_delta_ih[[1]][5])
+```
+
+# PURE CONTROL ARM ANALYSES - INDEX ITEM SCORES ON SELF-REPORTED INTELLECTUAL HUMILITY SCALE.
+```{r PURE CONTROL ARM ANALYSES - INDEX ITEM SCORES ON SELF-REPORTED INTELLECTUAL HUMILITY SCALE}
+# Create dataframe "data_delta_ih" which excludes the participant who didn't answer all of the intellectual humility measures.
+data_delta_ih <- data_with_pure_control[data_with_pure_control$participant_code != "9paveb", ]
+
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data_delta_ih$condition <- factor(data_delta_ih$condition, levels = c("treat", "control", "pure_control")) # Levels are now in the order of: treatment, control, pure_control.
+
+###############INDEX ITEM ONE###############
+
+# Run an ANOVA, comparing scores on index item one of a self-reported intellectual humility scale across the three conditions (treatment, control, pure control). Save as anova_delta_ih_1.
+anova_delta_ih_1 <- summary(aov(data = data_delta_ih, 
+      delta_ih_1 ~ condition))
+
+# Print the p-value.
+print(anova_delta_ih_1[[1]][5])
+
+###############INDEX ITEM TWO###############
+
+# Run an ANOVA, comparing scores on index item two of a self-reported intellectual humility scale across the three conditions (treatment, control, pure control). Save as anova_delta_ih_2.
+anova_delta_ih_2 <- summary(aov(data = data_delta_ih, 
+      delta_ih_2 ~ condition)) 
+
+# Print the p-value.
+print(anova_delta_ih_2[[1]][5])
+
+###############INDEX ITEM THREE###############
+
+# Run an ANOVA, comparing scores on index item three of a self-reported intellectual humility scale across the three conditions (treatment, control, pure control). Save as anova_delta_ih_3.
+anova_delta_ih_3 <- summary(aov(data = data_delta_ih,
+      delta_ih_3 ~ condition))
+
+# Print the p-value.
+print(anova_delta_ih_3[[1]][5])
+
+###############INDEX ITEM FOUR###############
+
+# Run an ANOVA, comparing scores on index item four of a self-reported intellectual humility scale across the three conditions (treatment, control, pure control). Save as anova_delta_ih_4.
+anova_delta_ih_4 <- summary(aov(data = data_delta_ih,
+      delta_ih_4 ~ condition))
+
+# Print the p-value.
+print(anova_delta_ih_4[[1]][5])
+
+###############INDEX ITEM FIVE###############
+
+# Run an ANOVA, comparing scores on index item five of a self-reported intellectual humility scale across the three conditions (treatment, control, pure control). Save as anova_delta_ih_5.
+anova_delta_ih_5 <- summary(aov(data = data_delta_ih, 
+      delta_ih_5 ~ condition))
+
+# Print the p-value.
+print(anova_delta_ih_5[[1]][5])
+
+###############INDEX ITEM SIX###############
+
+# Run an ANOVA, comparing scores on index item six of a self-reported intellectual humility scale across the three conditions (treatment, control, pure control). Save as anova_delta_ih_6.
+anova_delta_ih_6 <- summary(aov(data = data_delta_ih,
+      delta_ih_6 ~ condition))
+
+# Print the p-value.
+print(anova_delta_ih_6[[1]][5])
+```
+
+# PURE CONTROL ARM ANALYSES - POSITIVE EMOTIONS.
+```{r PURE CONTROL ARM ANALYSES - POSITIVE EMOTIONS}
+# Run an ANOVA, comparing scores on the panas positive emotions scale across the three conditions (treatment, control, pure control). Save as anova_panas_pos.
+anova_panas_pos <- summary(aov(data = data_with_pure_control, 
+      panas_pos ~ condition))
+
+# Print the p-value.
+print(anova_panas_pos[[1]][5])
+```
+
+# PURE CONTROL ARM ANALYSES - NEGATIVE EMOTIONS.
+```{r PURE CONTROL ARM ANALYSES - NEGATIVE EMOTIONS}
+# Run an ANOVA, comparing scores on the panas negative emotions scale across the three conditions (treatment, control, pure control). Save as anova_panas_neg.
+anova_panas_neg <- summary(aov(data = data_with_pure_control,  
+      panas_neg ~ condition))
+
+# Print the p-value.
+print(anova_panas_neg[[1]][5])
+```
+
+# PURE CONTROL ARM ANALYSES - COMPOSITE OF THE OVERALL QUALITY OF EMOTIONAL EXPERIENCE.
+```{r PURE CONTROL ARM ANALYSES - COMPOSITE OF THE OVERALL QUALITY OF EMOTIONAL EXPERIENCE}
+# Run an ANOVA, comparing overall scores on the panas emotions scale across the three conditions (treatment, control, pure control). Save as anova_panas.
+anova_panas <- summary(aov(data = data_with_pure_control, 
+      panas ~ condition)) 
+
+# Print the p-value.
+print(anova_panas[[1]][5])
+```
+
+# PURE CONTROL ARM ANALYSES - AFFECTIVE POLARIZATION.
+```{r PURE CONTROL ARM ANALYSES - AFFECTIVE POLARIZATION}
+# Create dataframe "data_no_true_independents" which exludes participants who identify as pure independents.
+data_no_true_independents <- data_with_pure_control %>%
+  filter(pid7 != "Pure Independent") # Filter out participants who identified as "Pure Independent".
+
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data_no_true_independents$condition <- factor(data_no_true_independents$condition, levels = c("treat", "control", "pure_control")) # Levels are now in the order of: treatment, control, pure_control.
+
+# Run an ANOVA, comparing affective polarization across the three conditions (treatment, control, pure control). Save as anova_affective_polarization.
+anova_affective_polarization <- summary(aov(data = data_no_true_independents, 
+      affective_polarization ~ condition))
+
+# Print the p-value.
+print(anova_affective_polarization[[1]][5])
+```
+
+# PURE CONTROL ARM ANALYSES - MODERATION OF BELIEFS ABOUT IMMIGRATION OR GUN CONTROL.
+```{r PURE CONTROL ARM ANALYSES - MODERATION OF BELIEFS ABOUT IMMIGRATION OR GUN CONTROL}
+# Run an ANOVA, comparing moderation of beliefs about immigration or gun control policies across the three conditions (treatment, control, pure control). Save as anova_extremity_post_less_pre.
+anova_extremity_post_less_pre <- summary(aov(data = data_with_pure_control, 
+      extremity_post_less_pre ~ condition)) 
+
+# Print the p-value.
+print(anova_extremity_post_less_pre[[1]][5])
+```
+

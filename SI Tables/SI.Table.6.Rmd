@@ -1,0 +1,76 @@
+---
+title: "SI.Table.6"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# CALCULATE PROPORTIONS.
+```{r CALCULATE PROPORTIONS}
+# Create dataframe "control_bots" which calculates the proportion of bot detection in the control condition.
+control_bots <- data %>% 
+  filter(condition == "control") %>% # Filter for participants in the control condition.
+  count(bots) %>% # Count the number of participants who selected each bot detection response.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of bot detection responses.
+
+# Create column "Experimental Condition" which indicates the experimental condition.
+control_bots <- control_bots %>% 
+  mutate(`Experimental Condition` = "Control") # Experimental condition was control.
+
+# Create dataframe "treatment_bots" which calculates the proportion of bot detection in the treatment condition.
+treatment_bots <- data %>% 
+  filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+  count(bots) %>% # Count the number of participants who selected each bot detection response.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of bot detection responses.
+
+# Create column "Experimental Condition" which indicates the experimental condition.
+treatment_bots <- treatment_bots %>% 
+  mutate(`Experimental Condition` = "Treat") # Experimental condition was treatment.
+```
+
+# FORMAT TABLE.
+```{r FORMAT TABLE}
+# Combine control_bots and treatment_bots into a new dataframe "table6".
+table6 <- rbind(control_bots, treatment_bots) # Combine the rows of control_bots and treatment_bots.
+
+# Delete the column "n" which contains the count information for participants within each category.
+table6["n"] <- NULL
+
+# Round the proportions to two decimal places.
+table6 <- table6 %>% 
+  mutate(proportion = round(proportion, 2))
+
+# Reorganize the table.
+table6 <- table6 %>% 
+  pivot_wider(names_from = bots, values_from = proportion)  # The bot detection response categories are the new columns, and contain the proportions. The rows are the experimental conditions.
+
+# Rename the columns.
+colnames(table6) <- c(" ", "No bots", "Many bots", "One or two bots",  "Several bots") # Rename the columns in the order that they appear.
+
+# Reorder the columns.
+table6 <- table6[c(" ", "No bots", "One or two bots", "Several bots", "Many bots")] # Define the order of the columns, listing column names in order of preferred appearance.
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table6)
+
+stargazer::stargazer(table6, rownames = FALSE, summary = FALSE)
+```
+

@@ -1,0 +1,242 @@
+---
+title: "SI.Section.12"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# STANDARDIZE VARIABLES.
+```{r STANDARDIZE VARIABLES}
+# Standardize panas_hostile.
+data <- data %>% 
+  mutate(panas_hostile = scale(panas_hostile))
+
+# Standardize panas_attentive.
+data <- data %>% 
+  mutate(panas_attentive = scale(panas_attentive))
+
+# Standardize panas_alert.
+data <- data %>% 
+  mutate(panas_alert = scale(panas_alert))
+
+# Standardize panas_inspired.
+data <- data %>% 
+  mutate(panas_inspired = scale(panas_inspired))
+
+# Standardize panas_upset.
+data <- data %>% 
+  mutate(panas_upset = scale(panas_upset))
+
+# Standardize delta_ih_4.
+data <- data %>% 
+  mutate(delta_ih_4 = scale(delta_ih_4))
+```
+
+# FORMAT DATA.
+```{r FORMAT DATA}
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data$condition <- factor(data$condition, levels = c("treat", "control")) # Levels are now in the order of: treatment, control.
+```
+
+# BOOTSTRAP: PANAS_HOSTILE.
+```{r BOOTSTRAP: PANAS_HOSTILE}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- data %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas_hostile")) - mean(boot %>% filter(condition == "control") %>% pull("panas_hostile"))}) # Calculate the difference between mean treatment panas_hostile and mean control panas_hostile.
+ 
+# Run a t-test on panas_hostile scores, comparing between treatment and control groups. Save in dataframe "t_test_panas_hostile".
+t_test_panas_hostile <- t.test(data %>% filter(condition == "treat") %>% pull("panas_hostile"),
+                 data %>% filter(condition == "control") %>% pull("panas_hostile"),
+                 na.action = na.omit, var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save as "d_panas_hostile".
+d_panas_hostile <- effsize::cohen.d(data %>% filter(condition == "treat") %>% pull("panas_hostile"),
+                 data %>% filter(condition == "control") %>% pull("panas_hostile"),
+                 na.action = na.omit)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_panas_hostile$estimate,2), ",", " t = ", round(t_test_panas_hostile$statistic,2) , ",", " df = ", t_test_panas_hostile$parameter, ",", " P = ", round(t_test_panas_hostile$p.value,3))
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, boots)
+```
+
+# BOOTSTRAP: PANAS_ATTENTIVE.
+```{r BOOTSTRAP: PANAS_ATTENTIVE}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- data %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas_attentive")) - mean(boot %>% filter(condition == "control") %>% pull("panas_attentive"))}) # Calculate the difference between mean treatment panas_attentive and mean control panas_attentive.
+  
+# Run a t-test on panas_attentive scores, comparing between treatment and control groups. Save as "t_test_panas_attentive".
+t_test_panas_attentive <- t.test(data %>% filter(condition == "treat") %>% pull("panas_attentive"), 
+                 data %>% filter(condition == "control") %>% pull("panas_attentive"),
+                 na.action = na.omit, var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save as "d_panas_attentive".
+d_panas_attentive <- effsize::cohen.d(data %>% filter(condition == "treat") %>% pull("panas_attentive"), 
+                 data %>% filter(condition == "control") %>% pull("panas_attentive"),
+                 na.action = na.omit)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_panas_attentive$estimate,2), ",", " t = ", round(t_test_panas_attentive$statistic,2) , ",", " df = ", t_test_panas_attentive$parameter, ",", " P = ", round(t_test_panas_attentive$p.value,3))
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, boots)
+```
+
+# BOOTSTRAP: PANAS_ALERT.
+```{r BOOTSTRAP: PANAS_ALERT}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- data %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas_alert")) - mean(boot %>% filter(condition == "control") %>% pull("panas_alert"))}) # Calculate the difference between mean treatment panas_alert and mean control panas_alert.
+  
+# Run a t-test on panas_alert scores, comparing between treatment and control groups. Save as "t_test_panas_alert".
+t_test_panas_alert <- t.test(data %>% filter(condition == "treat") %>% pull("panas_alert"),
+                 data %>% filter(condition == "control") %>% pull("panas_alert"),
+                 na.action = na.omit, var.equal = TRUE)
+  
+# Calculate the effect size (Cohen's d). Save as "d_panas_alert".
+d_panas_alert <- effsize::cohen.d(data %>% filter(condition == "treat") %>% pull("panas_alert"), 
+                 data %>% filter(condition == "control") %>% pull("panas_alert"),
+                 na.action = na.omit)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_panas_alert$estimate,2), ",", " t = ", round(t_test_panas_alert$statistic,2) , ",", " df = ", t_test_panas_alert$parameter, ",", " P = ", round(t_test_panas_alert$p.value,3))
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, boots)
+```
+
+# BOOTSTRAP: PANAS_INSPIRED.
+```{r BOOTSTRAP: PANAS_INSPIRED}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- data %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas_inspired")) - mean(boot %>% filter(condition == "control") %>% pull("panas_inspired"))}) # Calculate the difference between mean treatment panas_inspired and mean control panas_inspired.
+
+# Run a t-test on panas_inspired scores, comparing between treatment and control groups. Save as "t_test_panas_inspired".
+t_test_panas_inspired <- t.test(data %>% filter(condition == "treat") %>% pull("panas_inspired"),
+                 data %>% filter(condition == "control") %>% pull("panas_inspired"),
+                 na.action = na.omit, var.equal = TRUE)
+ 
+# Calculate the effect size (Cohen's d). Save as "d_panas_inspired".
+d_panas_inspired <- effsize::cohen.d(data %>% filter(condition == "treat") %>% pull("panas_inspired"), 
+                 data %>% filter(condition == "control") %>% pull("panas_inspired"),
+                 na.action = na.omit)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_panas_inspired$estimate,2), ",", " t = ", round(t_test_panas_inspired$statistic,2) , ",", " df = ", t_test_panas_inspired$parameter, ",", " P = ", round(t_test_panas_inspired$p.value,3))
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, boots) 
+```
+
+# BOOTSTRAP: PANAS_UPSET.
+```{r BOOTSTRAP: PANAS_UPSET}
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- data %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("panas_upset")) - mean(boot %>% filter(condition == "control") %>% pull("panas_upset"))}) # Calculate the difference between mean treatment panas_upset and mean control panas_upset.
+  
+# Run a t-test on panas_upset scores, comparing between treatment and control groups. Save as "t_test_panas_upset".
+t_test_panas_upset <- t.test(data %>% filter(condition == "treat") %>% pull("panas_upset"), 
+                 data %>% filter(condition == "control") %>% pull("panas_upset"),
+                 na.action = na.omit, var.equal = TRUE)
+ 
+# Calculate the effect size (Cohen's d). Save as "d_panas_upset".
+d_panas_upset <- effsize::cohen.d(data %>% filter(condition == "treat") %>% pull("panas_upset"), 
+                 data %>% filter(condition == "control") %>% pull("panas_upset"),
+                 na.action = na.omit)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_panas_upset$estimate,2), ",", " t = ", round(t_test_panas_upset$statistic,2) , ",", " df = ", t_test_panas_upset$parameter, ",", " P = ", round(t_test_panas_upset$p.value,3))
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, boots) 
+```
+
+# BOOTSTRAP: DELTA_IH_4.
+```{r BOOTSTRAP: DELTA_IH_4}
+# Create dataframe "data_delta_ih" which excludes the participant who didn't answer the intellectual humility measures.
+data_delta_ih <- data[data$participant_code != "9paveb", ]
+
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data_delta_ih$condition <- factor(data_delta_ih$condition, levels = c("treat", "control")) # Levels are now in the order of: treatment, control.
+
+# Set seed for analysis.
+set.seed(8675309)
+
+# Set the number of bootstrap samples.
+n_boots <- 5000
+
+# Bootstrapping.
+boots <- replicate(n_boots, { # Run the following two lines of code 5,000 times (n_boots = 5000).
+    boot <- data_delta_ih %>% sample_frac(1, replace = TRUE) # Randomly sample all rows in the dataframe with replacement.
+    mean(boot %>% filter(condition == "treat") %>% pull("delta_ih_4")) - mean(boot %>% filter(condition == "control") %>% pull("delta_ih_4"))}) # Calculate the difference between mean treatment delta_ih_4 and mean control delta_ih_4.
+
+# Run a t-test on delta_ih_4 scores, comparing between treatment and control groups. Save as "t_test_delta_ih_4".
+t_test_delta_ih_4 <- t.test(data_delta_ih %>% filter(condition == "treat") %>% pull("delta_ih_4"),
+                 data_delta_ih %>% filter(condition == "control") %>% pull("delta_ih_4"),
+                 na.action = na.omit, var.equal = TRUE)
+  
+# Calculate the effect size (Cohen's d). Save as "d_delta_ih_4".
+d_delta_ih_4 <- effsize::cohen.d(data_delta_ih %>% filter(condition == "treat") %>% pull("delta_ih_4"),
+                 data_delta_ih %>% filter(condition == "control") %>% pull("delta_ih_4"),
+                 na.action = na.omit)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_delta_ih_4$estimate,2), ",", " t = ", round(t_test_delta_ih_4$statistic,2) , ",", " df = ", t_test_delta_ih_4$parameter, ",", " P = ", round(t_test_delta_ih_4$p.value,3))
+
+# Remove leftover dataframes/vectors.
+rm(n_boots, boots) 
+```
+

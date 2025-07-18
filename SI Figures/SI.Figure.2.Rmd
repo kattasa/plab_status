@@ -1,0 +1,185 @@
+---
+title: "SI.Figure.2"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES. 
+```{r setup, include=FALSE}
+library(tidyverse)
+library(DiagrammeR)
+library(glue)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "intake" which contains cleaned participant intake survey data.
+intake <- read_csv('../Data/intake_cleaned.csv') # Read csv.
+
+# Create dataframe "pretreat" which contains cleaned participant pre-treatment survey data.
+pretreat <- read_csv('../Data/pretreat_cleaned.csv') # Read csv.
+
+# Create dataframe "posttreat" which contains cleaned participant post-treatment survey data.
+posttreat <- read_csv('../Data/posttreat_cleaned.csv') # Read csv.
+```
+
+# CALCULATIONS.
+```{r CALCULATIONS}
+# Calculate the number of participants who started the intake survey. Save as "start_intake".
+start_intake <- length(unique(na.omit(intake$participant_code))) + sum(is.na(intake$participant_code)) # Add the number of unique participant codes and the number of participant codes = NA. Participant code = NA means a participant started, but did not finish, the intake survey.
+
+# Calculate the number of participants who did not finish the intake survey.
+intake_drops <- sum(is.na(intake$participant_code)) # Participant code = NA means a participant started, but did not finish, the intake survey. Sum the number of participant codes = NA.
+
+# Calculate the number of participants who finished the intake survey. Save as "intake_completes".
+intake_completes <- intake %>%
+  filter(!is.na(participant_code)) %>% # If a participant did not finish the intake survey, then their participant code = NA. Filter out the rows without a participant code (!is.na).
+  summarise(length(unique(participant_code))) # Calculate the number of unique participant codes.
+
+# Calculate the number of participants who dropped during download. Save as "download_drops".
+download_drops <- intake %>% 
+  filter(!is.na(participant_code)) %>% # If participant code = NA, then the participant did not finish the intake survey.
+  mutate(started_pretreat = participant_code %in% pretreat$participant_code) %>%  # If a participant code in intake is contained in pretreat, then assign a TRUE value. Otherwise, assign a FALSE value.
+  summarise(sum(started_pretreat == FALSE)) # Count the number of participants who dropped during download (started_pretreat == FALSE)
+
+# Calculate the number of participants who started the pre-treatment survey. Save as "start_pretreat".
+start_pretreat <- length(unique(na.omit(pretreat$participant_code))) # Sum the number of unique participant codes.
+
+# Calculate the number of participants who did not finish the pre-treatment survey. Save as "pretreat_drops".
+pretreat_drops <- pretreat %>%
+  filter(is.na(`Q111_Page Submit`)) %>% # If a participant did not complete the pre-treatment survey, the variable "Q111_Page Submit" will = NA. Filter for the NAs (is.na).
+  summarise(length(unique(participant_code))) # Count the number of remaining unique participant codes.
+
+# Calculate the number of participants who finished the pre-treatment survey. Save as "pretreat_completes".
+pretreat_completes <- pretreat %>%
+  filter(!is.na(`Q111_Page Submit`)) %>% # If a participant did not complete the pre-treatment survey, the variable "Q111_Page Submit" will = NA. Filter out the NAs (!is.na).
+  summarise(length(unique(participant_code))) # Count the number of remaining unique participant codes.
+
+# Calculate the number of participants who dropped during newsfeed. Save as "newsfeed_drops".
+newsfeed_drops <- pretreat %>% 
+  distinct(participant_code, .keep_all = TRUE) %>% # Keep the first instance of each unique participant code.
+  filter(!is.na(`Q111_Page Submit`)) %>% # If a participant did not complete the pre-treatment survey, the variable "Q111_Page Submit" will = NA. Filter out the NAs (!is.na).
+  mutate(started_posttreat = participant_code %in% posttreat$participant_code) %>%  # If a participant code in pretreat is contained in posttreat, then assign a TRUE value. Otherwise, assign a FALSE value.
+  summarise(sum(started_posttreat == FALSE)) # Count the number of participants who dropped during newsfeed (started_posttreat == FALSE)
+
+# Calculate the number of participants who started the post-treatment survey. Save as "start_posttreat".
+start_posttreat <- length(unique(na.omit(posttreat$participant_code))) # Sum the number of unique participant codes.
+
+# Calculate the number of participants who dropped during the post-treatment survey. Save as "posttreat_drops".
+posttreat_drops <- posttreat %>%
+  filter(Progress < 93) %>% # If a participant did not complete the post-treatment survey, their progress on the survey will be less than 93%. Select the participants who had a survey progress of less than 93%.
+  summarise(length(unique(participant_code))) # Count the number of remaining unique participant codes.
+
+# Calculate the number of participants who finished the post-treatment survey. Save as "posttreat_completes".
+posttreat_completes <- posttreat %>%
+  filter(Progress >= 93) %>% # If a participant completed the post-treatment survey, their progress on the survey will be greater than or equal to 93%. Select the participants who had a survey progress greater than or equal to 93%.
+  summarise(length(unique(participant_code))) # Count the number of remaining unique participant codes.
+```
+
+# FIGURE FORMATTING.
+```{r FIGURE FORMATTING}
+# Create flowchart.
+figure2 <- grViz( # Use functions grViz and glue.
+glue(
+  
+  ###############SET FLOWCHART PARAMETERS###############
+  
+  "digraph flowchart {{ # Create a directed graph flowchart.
+  
+  graph [layout = dot, rankdir = TB, ranksep=0.1] # layout = dot indicates a hierarchical flowchart direction. rankdir = TB indicates a top to bottom flow. ranksep = 0.1 specifies spacing between items.
+  
+  node [shape = rectangle, style = filled, fillcolor = white, width = 3, height = 1] # shape = rectangle indicates rectangle boxes, style = filled and fillcolor = white indicates the boxes will be white. width = 3 and height = 1 specifies the width and height of the box.
+
+  ###############CREATE FLOWCHART BOXES, SPECIFY LABEL AND N-VALUE (WHICH WAS CALCULATED IN THE # CALCULATIONS. CHUNK ABOVE)###############
+  
+  # Generally, the format for the following lines are: name of box (e.g., start_intake), label in box (e.g., Started intake), N value (e.g., N = start_intake). <br/> indicates a line break. <i> indicates italics.
+
+  start_intake [label = <Started intake<br/><i>N</i> = {start_intake}>] 
+
+  intake_drops [label = <Did not finish intake<br/><i>N</i> = {intake_drops}>]
+  
+  intake_completes [label = <Finished intake<br/><i>N</i> = {intake_completes}>]
+  
+  download_drops [label = <Dropped during download<br/><i>N</i> = {download_drops}>]
+  
+  start_pretreat [label = <Started pre-treat<br/><i>N</i> = {start_pretreat}>]
+  
+  pretreat_completes [label = <Finished pre-treat<br/><i>N</i> = {pretreat_completes}>]
+  
+  pretreat_drops [label = <Did not finish pre-treat<br/><i>N</i> = {pretreat_drops}>]
+  
+  newsfeed_drops [label = <Dropped during newsfeed<br/><i>N</i> = {newsfeed_drops}>]
+  
+  start_posttreat [label = <Started post-treat<br/><i>N</i> = {start_posttreat}>]
+  
+  posttreat_drops [label = <Dropped during post-treat<br/><i>N</i> = {posttreat_drops}>]
+  
+  posttreat_completes[label = <Finished post-treat<br/><i>N</i> = {posttreat_completes}>]
+
+  ###############CREATE ALL INTERMEDIATE STEPS WITHIN THE FLOWCHART###############
+
+  # The layout of the attrition flowchart includes the numbers of participants who dropped/didn't finish a specific part of the experiment. The number of participants who dropped/didn't finish are depicted in between the part that they started and the part that they did not finish. In order to visually depict these participants between the two parts, a mid-point needs to be created within the line connecting the two parts. These midpoints are labeled with blank spaces, and the box dimensions are minimized so that they do not appear on the flowchart (width = 0.001, height = 0.001). There are 5 midpoints, indicating 5 points in which participants dropped from the experiment.
+  
+  blank1 [label = '', width = 0.001, height = 0.001]
+  
+  blank2 [label = '', width = 0.001, height = 0.001]
+  
+  blank3 [label = '', width = 0.001, height = 0.001]
+  
+  blank4 [label = '', width = 0.001, height = 0.001]
+  
+  blank5 [label = '', width = 0.001, height = 0.001]
+      
+  ###############CONNECT FLOWCHART BOXES###############   
+  
+  # Connect the boxes in the flowchart. For example, start_intake connects to intake_completes, with blank1 as an intermediate step (blank 1) between the two. intake_drops is an offshoot of the intermediate step (blank1). Minimize the arrow and line in the connection between start_intake and blank1 (dir=none, minlen=1). Create a line connecting the intermediate step to the intake_drops box. The intake_drops box should visually be on the same level as the intermediate step (rank = same; blank1 intake_drops). Finally, connect the intermediate step to intake_completes. The same format applies for all intermediate steps.
+  
+
+  start_intake -> blank1[dir=none, minlen=1] 
+  
+  blank1 -> intake_drops[minlen = 7.5]; {{rank = same; blank1 intake_drops}}
+
+  blank1 -> intake_completes
+  
+  
+  intake_completes -> blank2[dir=none, minlen=1]
+  
+  blank2 -> download_drops[minlen = 7.5]; {{rank = same; blank2 download_drops}}
+  
+  blank2 -> start_pretreat
+  
+  
+  start_pretreat -> blank3[dir=none, minlen=1]
+  
+  blank3 -> pretreat_drops[minlen = 7.5]; {{rank = same; blank3 pretreat_drops}}
+  
+  blank3 -> pretreat_completes
+  
+  
+  pretreat_completes -> blank4[dir=none, minlen=1]
+  
+  blank4 -> newsfeed_drops[minlen = 7.5]; {{rank = same; blank4 newsfeed_drops}}
+  
+  blank4 -> start_posttreat  
+  
+  
+  start_posttreat -> blank5[dir=none, minlen=1]
+  
+  blank5 -> posttreat_drops[minlen = 7.5]; {{rank = same; blank5 posttreat_drops}}
+  
+  blank5 -> posttreat_completes 
+
+}}"))
+
+```
+
+# FINAL FIGURE.
+```{r FINAL FIGURE}
+figure2
+```
+

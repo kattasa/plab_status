@@ -1,0 +1,74 @@
+---
+title: "SI.Table.7"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# CALCULATE PROPORTIONS.
+```{r CALCULATE PROPORTIONS}
+# Create dataframe "future_use_control" which calculates the proportion of future platform use responses in the control condition.
+future_use_control <- data %>% 
+  filter(condition == "control") %>% # Filter for participants in the control condition.
+  count(future_use) %>% # Count the number of participants who selected each future use response.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of future use responses.
+
+# Create column "Experimental Condition" which indicates the experimental condition.
+future_use_control <- future_use_control %>% 
+  mutate(`Experimental Condition` = "Control") # Experimental condition was control.
+
+# Create dataframe "future_use_treatment" which calculates the proportion of future platform use responses in the treatment condition.
+future_use_treatment <- data %>% 
+  filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+  count(future_use) %>% # Count the number of participants who selected each future use response.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of future use responses.
+
+# Create column "Experimental Condition" which indicates the experimental condition.
+future_use_treatment <- future_use_treatment %>% 
+  mutate(`Experimental Condition` = "Treat") # Experimental condition was treatment.
+```
+
+# FORMAT TABLE.
+```{r FORMAT TABLE}
+# Combine future_use_control and future_use_treatment into a new dataframe "table7".
+table7 <- rbind(future_use_control, future_use_treatment)
+
+# Delete the column "n" which contains the count information for participants within each category.
+table7["n"] <- NULL
+
+# Round the proportions to two decimal places.
+table7 <- table7 %>% 
+  mutate(proportion = round(proportion, 2))
+
+# Reorganize the table.
+table7 <- table7 %>% 
+  pivot_wider(names_from = future_use, values_from = proportion) # The future use response categories are the new columns, and contain the proportions. The rows are the experimental conditions.
+
+# Rename the first column.
+colnames(table7)[1] <- c(" ") # Rename the first column with a blank space " ".
+
+# Reorder the columns.
+table7 <- table7[c(" ", "Very unlikely", "Somewhat unlikely", "Neither unlikely nor likely", "Somewhat likely", "Very likely")] # Define the order of the columns, listing column names in order of preferred appearance.
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table7)
+stargazer::stargazer(table7, rownames = FALSE, summary = FALSE)
+```

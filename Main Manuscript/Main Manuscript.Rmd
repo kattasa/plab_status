@@ -1,0 +1,327 @@
+---
+title: "Main Manuscript"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(effsize)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# STANDARDIZE VARIABLES.
+```{r STANDARDIZE VARIABLES}
+# Standardize ih_a_all.
+data <- data %>% 
+  mutate(ih_a_all = scale(ih_a_all))
+
+# Standardize ih_engagement.
+data <- data %>% 
+  mutate(ih_engagement = scale(ih_engagement))
+
+# Standardize delta_ih.
+data <- data %>% 
+  mutate(delta_ih = scale(delta_ih))
+
+# Standardize delta_ih index items 1-6.
+data <- data %>% 
+  mutate(delta_ih_1 = scale(delta_ih_1)) %>% 
+  mutate(delta_ih_2 = scale(delta_ih_2)) %>% 
+  mutate(delta_ih_3 = scale(delta_ih_3)) %>% 
+  mutate(delta_ih_4 = scale(delta_ih_4)) %>% 
+  mutate(delta_ih_5 = scale(delta_ih_5)) %>% 
+  mutate(delta_ih_6 = scale(delta_ih_6))
+
+# Standardize panas_pos.
+data <- data %>% 
+  mutate(panas_pos = scale(panas_pos))
+
+# Standardize panas_neg.
+data <- data %>% 
+  mutate(panas_neg = scale(panas_neg))
+
+# Standardize panas.
+data <- data %>% 
+  mutate(panas = scale(panas))
+
+# Standardize affective_polarization.
+data <- data %>% 
+  mutate(affective_polarization = scale(affective_polarization))
+
+# Standardize extremity_post_less_pre.
+data <- data %>% 
+  mutate(extremity_post_less_pre = scale(extremity_post_less_pre))
+```
+
+# SPECIFY "CONDITION" COLUMN FACTOR LEVEL.
+```{r SPECIFY "CONDITION" COLUMN FACTOR LEVEL}
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data$condition <- factor(data$condition, levels = c("treat", "control")) # Levels are now in the order of: treat, control.
+```
+
+# IDENTIFYING THE BONUS WORD.
+```{r IDENTIFYING THE BONUS WORD}
+# Convert all participant bonus word answers to lowercase.
+data <- data %>%
+  mutate(password = str_to_lower(password))
+
+# Create column "correct_bonus_word" which classifies if a participant correctly identified the bonus word.
+data <- data %>%
+  mutate(correct_bonus_word = str_detect(password, 'win')) %>% # Detect if the bonus word "win" is in the participant's answer (TRUE value), if the bonus word isn't detected then assign a FALSE value.
+  mutate(correct_bonus_word = replace_na(correct_bonus_word, FALSE)) # If NA, assign a FALSE value.
+
+# Identify the proportion of total respondents who correctly identified the bonus word.
+data %>%
+  count(correct_bonus_word) %>% # Count the number of times participants correctly (TRUE) or incorrectly (FALSE) identified the bonus word.
+  mutate(prop = round(prop.table(n)*100,digits=2)) # Calculate the proportion (prop) of the number of times (n) participants correctly (TRUE) or incorrectly (FALSE) identified the bonus word. This uses the prop.table() function which divides n by the total for each group.
+
+# Identify the proportion of respondents within experimental conditions (treatment, control) who correctly identified the bonus word.
+data %>%
+  group_by(condition) %>% # Classify participants by their condition (treatment, control).
+  count(correct_bonus_word) %>% # Count the number of times participants correctly (TRUE) or incorrectly (FALSE) identified the bonus word.
+  mutate(prop = round(prop.table(n)*100,digits=2)) # Calculate the proportion (prop) of the number of times (n) participants correctly (TRUE) or incorrectly (FALSE) identified the bonus word. This uses the prop.table() function which divides n by the total for each group.
+```
+
+# IDENTIFYING INTELLECTUAL HUMILITY POSTS.
+```{r IDENTIFYING INTELLECTUAL HUMILITY POSTS}
+# Calculate the average number of intellectually humble posts selected by participats as the one that would receive more likes across conditions (treatment, control).
+data %>%
+  group_by(condition) %>% # Classify participants by their condition (treatment, control).
+  summarise(mean = round(mean(third_order),digits=2)) # Calculate the average number of IH posts selected by participants (contained in the column "third_order"). For more information on third_order, see "Data Cleaning.Rmd".
+```
+
+# IDENTIFYING BOTS.
+```{r IDENTIFYING BOTS}
+# Create "bot_check" which contains the number of participant responses for each response category regarding the amount of bots encountered on the platform.
+bot_check <- data %>% 
+  group_by(bots) %>% # Classify participants by their bot response category.
+  count(bots) # Count the number of times participants answered each bot response category.
+  
+# Calculate the proportion of participant responses for each response category regarding the amount of bots encountered on the platform.
+bot_check <- bot_check %>%   
+  ungroup() %>% # In order to find the proportion of responses relative to the total, we no longer need to group participants by their response category.
+  mutate(prop = prop.table(n)*100) # Calculate the proportion (prop) of the number of times (n) participants responded within each category. This uses the prop.table() function which divides n by the total.
+
+# Sum the proportion of respondents who believed either that none of or only one or two of the other users on the platform were bots.
+round(bot_check$prop[bot_check$bots == "No, I did not encounter any bots"] + bot_check$prop[bot_check$bots == "Yes, I encountered one or two bots"], digits=2) # When the "bots" response column contains either "No, I did not encounter any bots" or "Yes, I encountered one or two bots" then add the proportions contained in the "prop" column.
+
+# Remove the dataframe "bot_check" from environment.
+rm(bot_check)
+```
+
+# T-TEST: AUTHORING INTELLECTUALLY HUMBLE CONTENT.
+```{r T-TEST: AUTHORING INTELLECTUALLY HUMBLE CONTENT}
+# Run a t-test, comparing (between treatment and control groups) Perspective AI scores (contained in the column "ih_a_all") indicating intellectual humility within the content written by the participants. Save in dataframe "ttest_ih_content".
+ttest_ih_content <- t.test(data = data, ih_a_all ~ condition, # Compare intellectual humility content scores (ih_a_all) by condition (treatment, control).
+        alternative = 'two.sided', # Run a two sided t-test.
+        var.equal = TRUE) # Assume equal variance.
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_ih_content".
+d_ih_content <- effsize::cohen.d(data = data, ih_a_all ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_ih_content$estimate,2), ",", " t = ", round(ttest_ih_content$statistic,2) , ",", " df = ", ttest_ih_content$parameter, ",", " P = ", round(ttest_ih_content$p.value,2))
+```
+
+# T-TEST: ENGAGMENT WITH INTELLECTUALLY HUMBLE CONTENT.
+```{r T-TEST: ENGAGMENT WITH INTELLECTUALLY HUMBLE CONTENT}
+# Run a t-test, comparing (between treatment and control groups) engagement with intellectual humility content (contained in the column "ih_engagement"). Save in dataframe "ttest_ih_engagement".
+ttest_ih_engagement <- t.test(data = data, ih_engagement ~ condition, # Compare intellectual humility engagement scores (ih_engagement) by condition (treatment, control).
+        alternative = 'two.sided', # Run a two sided t-test.
+        var.equal = TRUE) # Assume equal variance.
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_ih_engagement".
+d_ih_engagement <- effsize::cohen.d(data = data, ih_engagement ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_ih_engagement$estimate,2), ",", " t = ", round(ttest_ih_engagement$statistic,2) , ",", " df = ", ttest_ih_engagement$parameter, ",", " P = ", round(ttest_ih_engagement$p.value,2))
+```
+
+# T-TEST: SCORES ON SELF-REPORTED INTELLECTUAL HUMILITY SCALE.
+```{r T-TEST: SCORES ON SELF-REPORTED INTELLECTUAL HUMILITY SCALE}
+# Create dataframe "data_delta_ih" which does not contain the participant who didn't answer the intellectual humility measures.
+data_delta_ih <- data[data$participant_code != "9paveb", ]
+
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data_delta_ih$condition <- factor(data_delta_ih$condition, levels = c("treat", "control")) # Levels are now in the order of: treat, control.
+
+# Run a t-test, comparing (between treatment and control groups) scores on the self-reported intellectual humility scale (contained in the column "delta_ih"). Save in dataframe "ttest_delta_ih".
+ttest_delta_ih <- t.test(data = data_delta_ih, delta_ih ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_delta_ih".
+d_delta_ih <- effsize::cohen.d(data = data_delta_ih, delta_ih ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_delta_ih$estimate,2), ",", " t = ", round(ttest_delta_ih$statistic,2) , ",", " df = ", ttest_delta_ih$parameter, ",", " P = ", round(ttest_delta_ih$p.value,3))
+```
+
+# T-TEST: INDEX ITEM SCORES ON SELF-REPORTED INTELLECTUAL HUMILITY SCALE.
+```{r T-TEST: INDEX ITEM SCORES ON SELF-REPORTED INTELLECTUAL HUMILITY SCALE}
+# Create dataframe "data_delta_ih" which does not contain the participant who didn't answer the intellectual humility measures.
+data_delta_ih <- data[data$participant_code != "9paveb", ]
+
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data_delta_ih$condition <- factor(data_delta_ih$condition, levels = c("treat", "control")) # Levels are now in the order of: treatment, control.
+
+###############INDEX ITEM ONE###############
+
+# Run a t-test, comparing (between treatment and control groups) scores on index item one of the self-reported intellectual humility scale (contained in the column "delta_ih_1"). Save in dataframe "ttest_delta_ih_1".
+ttest_delta_ih_1 <- t.test(data = data_delta_ih, delta_ih_1 ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# P-value is not significant, no need for further testing.
+print(ttest_delta_ih_1$p.value)
+
+###############INDEX ITEM TWO###############
+
+# Run a t-test, comparing (between treatment and control groups) scores on index item two of the self-reported intellectual humility scale (contained in the column "delta_ih_2"). Save in dataframe "ttest_delta_ih_2".
+ttest_delta_ih_2 <-t.test(data = data_delta_ih, delta_ih_2 ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE) 
+
+# P-value is not significant, no need for further testing.
+print(ttest_delta_ih_2$p.value)
+
+###############INDEX ITEM THREE###############
+
+# Run a t-test, comparing (between treatment and control groups) scores on index item three of the self-reported intellectual humility scale (contained in the column "delta_ih_3"). Save in dataframe "ttest_delta_ih_3".
+ttest_delta_ih_3 <- t.test(data = data_delta_ih, delta_ih_3 ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE) 
+
+# P-value is not significant, no need for further testing.
+print(ttest_delta_ih_3$p.value)
+
+###############INDEX ITEM FOUR###############
+
+# Run a t-test, comparing (between treatment and control groups) scores on index item four of the self-reported intellectual humility scale (contained in the column "delta_ih_4"). Save in dataframe "ttest_delta_ih_4".
+ttest_delta_ih_4 <- t.test(data = data_delta_ih, delta_ih_4 ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE) 
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_delta_ih_4".
+d_delta_ih_4 <- effsize::cohen.d(data = data_delta_ih, delta_ih_4 ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_delta_ih_4$estimate,2), ",", " t = ", round(ttest_delta_ih_4$statistic,2) , ",", " df = ", ttest_delta_ih_4$parameter, ",", " P = ", round(ttest_delta_ih_4$p.value,3))
+
+###############INDEX ITEM FIVE###############
+
+# Run a t-test, comparing (between treatment and control groups) scores on index item five of the self-reported intellectual humility scale (contained in the column "delta_ih_5"). Save in dataframe "ttest_delta_ih_5".
+ttest_delta_ih_5 <- t.test(data = data_delta_ih, delta_ih_5 ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE) 
+
+# P-value is not significant, no need for further testing.
+print(ttest_delta_ih_5$p.value)
+
+###############INDEX ITEM SIX###############
+
+# Run a t-test, comparing (between treatment and control groups) scores on index item six of the self-reported intellectual humility scale (contained in the column "delta_ih_6"). Save in dataframe "ttest_delta_ih_6".
+ttest_delta_ih_6 <- t.test(data = data_delta_ih, delta_ih_6 ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# P-value is not significant, no need for further testing.
+print(ttest_delta_ih_6$p.value)
+```
+
+# T-TEST: POSITIVE EMOTIONS.
+```{r T-TEST: POSITIVE EMOTIONS}
+# Run a t-test, comparing (between treatment and control groups) positive emotion scores (contained in the column "panas_pos"). Save in dataframe "ttest_panas_pos".
+ttest_panas_pos <- t.test(data = data, panas_pos ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_panas_pos".
+d_panas_pos <- effsize::cohen.d(data = data, panas_pos ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_panas_pos$estimate,2), ",", " t = ", round(ttest_panas_pos$statistic,2) , ",", " df = ", ttest_panas_pos$parameter, ",", " P = ", round(ttest_panas_pos$p.value,3))
+```
+
+# T-TEST: NEGATIVE EMOTIONS.
+```{r T-TEST: NEGATIVE EMOTIONS}
+# Run a t-test, comparing (between treatment and control groups) negative emotion scores (contained in the column "panas_neg"). Save in dataframe "ttest_panas_neg".
+ttest_panas_neg <- t.test(data = data, panas_neg ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_panas_neg".
+d_panas_neg <- effsize::cohen.d(data = data, panas_neg ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_panas_neg$estimate,2), ",", " t = ", round(ttest_panas_neg$statistic,2) , ",", " df = ", ttest_panas_neg$parameter, ",", " P = ", round(ttest_panas_neg$p.value,3))
+```
+
+# T-TEST: COMPOSITE OF THE OVERALL QUALITY OF EMOTIONAL EXPERIENCE.
+```{r T-TEST: COMPOSITE OF THE OVERALL QUALITY OF EMOTIONAL EXPERIENCE}
+# Run a t-test, comparing (between treatment and control groups) overall quality of emotional experience (contained in the column "panas"). Save in dataframe "ttest_panas".
+ttest_panas <- t.test(data = data, panas ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_panas".
+d_panas <- effsize::cohen.d(data = data, panas ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_panas$estimate,2), ",", " t = ", round(ttest_panas$statistic,2) , ",", " df = ", ttest_panas$parameter, ",", " P = ", round(ttest_panas$p.value,3))
+```
+
+# T-TEST: AFFECTIVE POLARIZATION.
+```{r T-TEST: AFFECTIVE POLARIZATION}
+# This analysis exludes participants who identify as "pure independents". Create a dataframe "data_no_true_independents" which exludes participants who identify as pure independents.
+data_no_true_independents <- data %>%
+  filter(pid7 != "Pure Independent") # Filter out participants who identified as "pure independent", but keep rows containing NA values.
+
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data_no_true_independents$condition <- factor(data_no_true_independents$condition, levels = c("treat", "control")) # Levels are now in the order of: treatment, control.
+
+# Run a t-test, comparing (between treatment and control groups) affective polarization scores (contained in the column "affective_polarization"). Save in dataframe "ttest_affective_polarization".
+ttest_affective_polarization <- t.test(data = data_no_true_independents, affective_polarization ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_affective_polarization".
+d_affective_polarization <- effsize::cohen.d(data = data_no_true_independents, affective_polarization ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_affective_polarization$estimate,2), ",", " t = ", round(ttest_affective_polarization$statistic,2) , ",", " df = ", ttest_affective_polarization$parameter, ",", " P = ", round(ttest_affective_polarization$p.value,3))
+```
+
+# T-TEST: MODERATION OF BELIEFS ABOUT IMMIGRATION OR GUN CONTROL.
+```{r T-TEST: MODERATION OF BELIEFS ABOUT IMMIGRATION OR GUN CONTROL}
+# Run a t-test, comparing (between treatment and control groups) moderation of beliefs about immigration or gun control (contained in the column "extremity_post_less_pre"). Save in dataframe "ttest_extremity_post_less_pre".
+ttest_extremity_post_less_pre <- t.test(data = data, extremity_post_less_pre ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_extremity_post_less_pre".
+d_extremity_post_less_pre <- effsize::cohen.d(data = data, extremity_post_less_pre ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_extremity_post_less_pre$estimate,2), ",", " t = ", round(ttest_extremity_post_less_pre$statistic,2) , ",", " df = ", ttest_extremity_post_less_pre$parameter, ",", " P = ", round(ttest_extremity_post_less_pre$p.value,3))
+```
+
+# REMOVE EXTRA DATAFRAMES AND VALUES FROM ENVIRONMENT.
+```{r REMOVE EXTRA DATAFRAMES AND VALUES FROM ENVIRONMENT}
+# Remove extra dataframes and values from environment.
+# rm(list=ls())
+```
+

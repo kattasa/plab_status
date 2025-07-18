@@ -1,0 +1,138 @@
+---
+title: "SI.Table.9"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "app_engagement" which contains cleaned participant app engagement data.
+app_engagement <- read_csv('../Data/app_engagement_cleaned.csv') # Read csv data file.
+```
+
+# FORMAT DATA.
+```{r FORMAT DATA}
+# Create column "condition" which classifies participants as being a part of the treatment or control experimental condition.
+app_engagement <- app_engagement %>% 
+  mutate(condition = case_when( 
+    str_detect(treatmentArm, "treat") ~ "treat", # treatmentArm is a column that contains information on experimental condition. If treatmentArm contains the word "treat", assign the word "treat" to "condition".
+    str_detect(treatmentArm, "control") ~ "control")) # treatmentArm is a column that contains information on experimental condition. If treatmentArm contains the word "control", assign the word "control" to "condition".
+
+# Filter for written content created by participants (userContent == 1).
+app_engagement <- app_engagement %>% 
+  filter(userContent == 1)
+```
+
+# CALCULATE MEAN AND CONFIDENCE INTERVAL FOR CONTROL CONDITION.
+```{r CALCULATE MEAN AND CONFIDENCE INTERVAL FOR CONTROL CONDITION}
+# Calculate the mean text length written by participants in the control condition. Save as "mean_control".
+mean_control <- app_engagement %>% 
+  filter(condition == "control") %>% # Filter for participants in the control condition.
+  summarise(mean = mean(text_length)) %>% # Calculate the mean text length of content written by participants.
+  pull(mean) # Save the mean as "mean_control".
+
+# Calculate the standard error for text length written by participants in the control condition. Save as "se_control".
+se_control <- app_engagement %>% 
+  filter(condition == "control") %>% # Filter for participants in the control condition.
+  summarise(se = sd(text_length) / sqrt(length(text_length))) %>% # To find the standard error (se), divide the standard deviation (sd) of the text length by the square root (sqrt) of the number of observations (length(text_length)).
+  pull(se) # Save the standard error as "se_control".
+
+# Calculate the t-critical value (t) for text length written by participants in the control condition. Save as "t_control".
+t_control <- app_engagement %>% 
+  filter(condition == "control") %>% # Filter for participants in the control condition.
+  summarise(t = qt(1-0.05 / 2, df = length(text_length) - 1)) %>%  # To find the t-critical value (t), use the function qt(), defining the alpha value as 0.05, and the degrees of freedom as the number of observations (length(text_length)) - 1.
+  pull(t) # Save the t-critical value as "t_control".
+
+# Calculate the margin of error for text length written by participants in the control condition. Save as "margin_of_error_control".
+margin_of_error_control <- app_engagement %>% 
+  filter(condition == "control") %>% # Filter for participants in the control condition.
+  summarise(margin_of_error = t_control * se_control) %>% # To find the margin of error, multiply the t-critical value by the standard error.
+  pull(margin_of_error) # Save the margin of error as "margin_of_error_control".
+
+# Calculate the confidence interval. Save as "interval_control".
+interval_control <- c(mean_control - margin_of_error_control, mean_control + margin_of_error_control) # Subtract the margin of error from the mean to find the lower bound of the confidence interval, and add the margin of error to the mean to find the upper bound of the confidence interval.
+
+# Round the interval boundary estimates to two decimal places.
+interval_control <- round(interval_control, 2)
+
+# Organize the confidence interval, so that it is in the format (lower bound, upper bound).
+interval_control <- paste0("(", interval_control[1], ", ", interval_control[2], ")") # The lower bound is interval_control[1] and the upper bound is interval_control[2].
+
+# Round the mean text length written by participants in the control condition to two decimal places.
+mean_control <- round(mean_control, 2)
+```
+
+# CALCULATE MEAN AND CONFIDENCE INTERVAL FOR TREATMENT CONDITION.
+```{r CALCULATE MEAN AND CONFIDENCE INTERVAL FOR TREATMENT CONDITION}
+# Calculate the mean text length written by participants in the treatment condition. Save as "mean_treatment".
+mean_treatment <- app_engagement %>% 
+  filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+  summarise(mean = mean(text_length)) %>% # Calculate the mean text length of content written by participants.
+  pull(mean) # Save the mean as "mean_treatment".
+
+# Calculate the standard error for text length written by participants in the treatment condition. Save as "se_treatment".
+se_treatment <- app_engagement %>% 
+  filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+  summarise(se = sd(text_length) / sqrt(length(text_length))) %>% # To find the standard error (se), divide the standard deviation (sd) of the text length by the square root (sqrt) of the number of observations (length(text_length)).
+  pull(se) # Save the standard error as "se_treatment".
+
+# Calculate the t-critical value (t) for text length written by participants in the treatment condition. Save as "t_treatment".
+t_treatment <- app_engagement %>% 
+  filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+  summarise(t = qt(1-0.05 / 2, df = length(text_length) - 1)) %>%  # To find the t-critical value (t), use the function qt(), defining the alpha value as 0.05, and the degrees of freedom as the number of observations (length(text_length)) - 1.
+  pull(t) # Save the t-critical value as "t_treatment".
+
+# Calculate the margin of error for text length written by participants in the treatment condition. Save as "margin_of_error_treatment".
+margin_of_error_treatment <- app_engagement %>% 
+  filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+  summarise(margin_of_error = t_treatment * se_treatment) %>% # To find the margin of error, multiply the t-critical value and the standard error.
+  pull(margin_of_error) # Save the margin of error as "margin_of_error_treatment".
+
+# Calculate the confidence interval. Save as "interval_treatment".
+interval_treatment <- c(mean_treatment - margin_of_error_treatment, mean_treatment + margin_of_error_treatment) # Subtract the margin of error from the mean to find the lower bound of the confidence interval, and add the margin of error to the mean to find the upper bound of the confidence interval.
+
+# Round the interval boundary estimates to two decimal places.
+interval_treatment <- round(interval_treatment, 2)
+
+# Organize the confidence interval, so that it is in the format (lower bound, upper bound).
+interval_treatment <- paste0("(", interval_treatment[1], ", ", interval_treatment[2], ")") # The lower bound is interval_treatment[1] and the upper bound is interval_treatment[2].
+
+# Round the mean text length written by participants in the treatment condition to two decimal places.
+mean_treatment <- round(mean_treatment, 2)
+```
+
+# FORMAT TABLE.
+```{r FORMAT TABLE}
+# Create an empty dataframe "table9" with columns "Condition" and "Postlength" which will contain character values.
+table9 <- data.frame(Condition = character(), Postlength = character())
+
+# Add row "Control", pasting in the mean and confidence interval for control post text length.
+table9 <- table9 %>% 
+  add_row(Condition = "Control", Postlength = paste(mean_control, interval_control)) 
+
+# Add row "Treat", pasting in the mean and confidence interval for treatment post text length.
+table9 <- table9 %>% 
+  add_row(Condition = "Treat", Postlength = paste(mean_treatment, interval_treatment))
+
+# Rename columns.
+table9 <- table9 %>% 
+  rename(" " = "Condition", # Replace the "Condition" column name with a blank space " ".
+         "Post length" = "Postlength") # Replace the "Postlength" column name with "Post length".
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table9)
+stargazer::stargazer(table9, summary = FALSE, rownames = FALSE)
+```

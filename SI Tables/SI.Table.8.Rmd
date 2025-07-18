@@ -1,0 +1,119 @@
+---
+title: "SI.Table.8"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES. 
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# FORMAT DATA.
+```{r FORMAT DATA}
+# Create column "likes_and_dislikes" which combines the number of total likes and total dislikes for each participant.
+data <- data %>% 
+  mutate(likes_and_dislikes = total_likes + total_dislikes) # Sum the amount of likes and dislikes.
+
+# Create dataframe "treatment_data" for participants in the treatment condition.
+treatment_data <- data %>% 
+  filter(condition == "treat") # Filter for participants in the treatment condition.
+
+# Create dataframe "control_data" for participants in the control condition.
+control_data <- data %>% 
+  filter(condition == "control") # Filter for participants in the control condition.
+```
+
+# CALCULATE AVERAGE LIKES/DISLIKES AND CONFIDENCE INTERVALS.
+```{r CALCULATE AVERAGE LIKES/DISLIKES AND CONFIDENCE INTERVALS}
+###############MEAN AND CONFIDENCE INTERVAL FUNCTION###############
+
+# Create a function "confidence_interval" which calculates 95% confidence intervals. The input for the function is 1) the dataframe (data) and 2) the variable of interest (variable).
+confidence_interval <- function(data, variable){
+  
+  # Calculate the mean of the variable of interest. Note: data[[variable]] is way to call a column within a dataframe.
+  mean <- mean(data[[variable]], na.rm = TRUE) # Exclude NA values from the mean calculation.
+  
+  # Calculate the standard error (se) of the variable of interest.
+  se <- sd(data[[variable]], na.rm = TRUE) / sqrt(length(data[[variable]])) # Divide the standard deviation of the variable by the square root of the number of observations of the variable.
+  
+  # Calculate the t-critical value (t) of the variable of interest.
+  t <- qt(1-0.05 / 2, df = length(data[[variable]]) - 1) # Since this is a 95% confidence interval, use a = 0.05. Degrees of freedom are the number of observations of the variable - 1.
+  
+  # Calculate the margin of error.
+  margin_of_error <- t * se # Multiply the t-critical value and the standard error.
+  
+  # Calculate the 95% confidence interval by subtracting/adding the mean and margin of error.
+  interval <- c(mean - margin_of_error, mean + margin_of_error)
+  
+  # Round the confidence interval to two decimal places.
+  interval <- round(interval, 2)
+  
+  # Format the confidence interval so that it's organized as: (lower bound, upper bound). Lower bound = interval[1] and upper bound = interval[2].
+  interval <- paste0("(", interval[1], ",", interval[2], ")")
+  
+  # Round the mean to two decimal places.
+  mean <- round(mean, 2)
+  
+  # Finally, return the mean and the confidence interval.
+  return(paste(mean, interval))}
+
+###############MEAN AND CONFIDENCE INTERVALS - CONTROL###############
+
+# Mean and confidence interval for control likes.
+control_likes <- confidence_interval(control_data, "total_likes") # data = control_data, variable = total_likes.
+
+# Mean and confidence interval for control dislikes.
+control_dislikes <- confidence_interval(control_data, "total_dislikes") # data = control_data, variable = total_dislikes.
+
+# Mean and confidence interval for control likes + dislikes.
+control_likes_and_dislikes <- confidence_interval(control_data, "likes_and_dislikes") # data = control_data, variable = likes_and_dislikes.
+
+###############MEAN AND CONFIDENCE INTERVALS - TREATMENT###############
+
+# Mean and confidence interval for treatment likes.
+treatment_likes <- confidence_interval(treatment_data, "total_likes") # data = treatment_data, variable = total_likes.
+
+# Mean and confidence interval for treatment dislikes.
+treatment_dislikes <- confidence_interval(treatment_data, "total_dislikes") # data = treatment_data, variable = total_dislikes.
+
+# Mean and confidence interval for treatment likes + dislikes.
+treatment_likes_and_dislikes <- confidence_interval(treatment_data, "likes_and_dislikes") # data = treatment_data, variable = likes_and_dislikes.
+```
+
+# FORMAT TABLE.
+```{r FORMAT TABLE}
+# Create an empty dataframe "table8" with columns "name", "Control", and "Treated" which will contain character values.
+table8 <- data.frame(name = character(), Control = character(), Treated = character())
+
+# Add row "Avg # Likes", pasting in control_likes in the "Control" column, and treatment_likes in the "Treated" column.
+table8 <- table8 %>% 
+  add_row(name = "Avg # Likes", Control = control_likes, Treated = treatment_likes) 
+
+# Add row "Avg # Dislikes", pasting in control_dislikes in the "Control" column, and treatment_dislikes in the "Treated" column.
+table8 <- table8 %>% 
+  add_row(name = "Avg # Dislikes", Control = control_dislikes, Treated = treatment_dislikes) 
+
+# Add row "Avg # Likes and Dislikes", pasting in control_likes_and_dislikes in the "Control" column, and treatment_likes_and_dislikes in the "Treated" column.
+table8 <- table8 %>% 
+  add_row(name = "Avg # Likes and Dislikes", Control = control_likes_and_dislikes, Treated = treatment_likes_and_dislikes) 
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table8)
+stargazer::stargazer(table8, rownames = FALSE, summary = FALSE)
+```
+

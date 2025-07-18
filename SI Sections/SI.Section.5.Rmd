@@ -1,0 +1,219 @@
+---
+title: "SI.Section.5"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(effsize)
+library(ggplot2)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# SPECIFY "CONDITION" COLUMN FACTOR LEVEL.
+```{r SPECIFY "CONDITION" COLUMN FACTOR LEVEL}
+# Specify factor order of "condition" column. This is important for when analyses are run (e.g., t-value valence, etc.).
+data$condition <- factor(data$condition, levels = c("treat", "control")) # Levels are now in the order of: treatment, control.
+```
+
+# TREATMENT ARM - AVERAGE WORDS PER POST, LIKES, DISLIKES.
+```{r TREATMENT ARM - AVERAGE WORDS PER POST, LIKES, DISLIKES}
+# Calculate the average words per post written by participants.
+data %>%
+  filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+  summarise(mean = sum(total_words_in_posts)/sum(num_posts)) %>% # Add the amount of words in all posts and divide by the total number of posts.
+  mutate(mean = round(mean, 0)) # Round the mean to 0 decimal places.
+
+# Calculate the average amount of likes.
+data %>%
+  filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+  summarise(mean = mean(total_likes)) %>% # Calculate the mean of the variable total_likes.
+  mutate(mean = round(mean, 1)) # Round the mean to 1 decimal place.
+
+# Calculate the average amount of dislikes.
+data %>%
+  filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+  summarise(mean = mean(total_dislikes)) %>% # Calculate the mean of the variable total_dislikes.
+  mutate(mean = round(mean, 2)) # Round the mean to 2 decimal places.
+```
+
+# CONTROL ARM - AVERAGE WORDS PER POST, LIKES, DISLIKES.
+```{r CONTROL ARM - AVERAGE WORDS PER POST, LIKES, DISLIKES}
+# Calculate the average words per post written by participants.
+data %>%
+  filter(condition == "control") %>% # Filter for participants in the control condition.
+  summarise(mean = sum(total_words_in_posts)/sum(num_posts)) %>% # Add the amount of words in all posts and divide by the total number of posts.
+  mutate(mean = round(mean, 0)) # Round the mean to 0 decimal places.
+
+# Calculate the average amount of likes.
+data %>%
+  filter(condition == "control") %>% # Filter for participants in the control condition.
+  summarise(mean = mean(total_likes)) %>% # Calculate the mean of the variable total_likes.
+  mutate(mean = round(mean, 1)) # Round the mean to 1 decimal place.
+
+# Calculate the average amount of dislikes.
+data %>%
+  filter(condition == "control") %>% # Filter for participants in the control condition.
+  summarise(mean = mean(total_dislikes)) %>% # Calculate the mean of the variable total_dislikes.
+  mutate(mean = round(mean, 2)) # Round the mean to 0 decimal places.
+```
+
+# DIFFERENCE BETWEEN NUMBER OF POSTS LIKED/DISLIKED BETWEEN TREATMENT AND CONTROL.
+```{r DIFFERENCE BETWEEN NUMBER OF POSTS LIKED/DISLIKED BETWEEN TREATMENT AND CONTROL}
+###############COMPARING NUMBER OF LIKES###############
+
+# Run a t-test, comparing (between conditions: treatment and control) the number of liked posts. Save as "t.test_likes".
+t.test_likes <- t.test(data = data, total_likes ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE) 
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_likes".
+d_likes <- effsize::cohen.d(data = data, total_likes ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_likes$estimate,2), ",", " t = ", round(t.test_likes$statistic,2) , ",", " df = ", t.test_likes$parameter, ",", " P = ", round(t.test_likes$p.value,3))
+
+###############COMPARING NUMBER OF DISLIKES###############
+
+# Run a t-test, comparing (between conditions: treatment and control) the number of disliked posts. Save as "t.test_dislikes".
+t.test_dislikes <- t.test(data = data, total_dislikes ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE) 
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_dislikes".
+d_dislikes <- effsize::cohen.d(data = data, total_dislikes ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_dislikes$estimate,2), ",", " t = ", round(t.test_dislikes$statistic,2) , ",", " df = ", t.test_dislikes$parameter, ",", " P = ", round(t.test_dislikes$p.value,3))
+
+###############COMPARING NUMBER OF POOLED LIKES AND DISLIKES###############
+
+# Create column "pooled_likes_dislikes" which calculates the sum of liked and disliked posts for each participant. 
+data <- data %>% 
+  mutate(pooled_likes_dislikes = total_likes + total_dislikes)
+
+# Run a t-test, comparing (between conditions: treatment and control) the pooled number of liked and disliked posts. Save as "t.test_likes_and_dislikes".
+t.test_likes_and_dislikes <- t.test(data = data, pooled_likes_dislikes ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_likes_and_dislikes".
+d_likes_and_dislikes <- effsize::cohen.d(data = data, pooled_likes_dislikes ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_likes_and_dislikes$estimate,2), ",", " t = ", round(t.test_likes_and_dislikes$statistic,2) , ",", " df = ", t.test_likes_and_dislikes$parameter, ",", " P = ", round(t.test_likes_and_dislikes$p.value,3))
+
+```
+
+# DIFFERENCE IN TEXT LENGTH BETWEEN TREATMENT AND CONTROL.
+```{r DIFFERENCE IN TEXT LENGTH BETWEEN TREATMENT AND CONTROL}
+###############COMPARING NUMBER OF WORDS WRITTEN IN POSTS###############
+
+# Run a t-test, comparing (between conditions: treatment and control) the number of words in posts written by participants. Save in dataframe "t.test_post_words".
+t.test_post_words <- t.test(data = data, total_words_in_posts ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_post_words".
+d_post_words <- effsize::cohen.d(data = data, total_words_in_posts ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_post_words$estimate,2), ",", " t = ", round(t.test_post_words$statistic,2) , ",", " df = ", t.test_post_words$parameter, ",", " P = ", round(t.test_post_words$p.value,3))
+
+###############COMPARING NUMBER OF WORDS WRITTEN IN COMMENTS###############
+
+# Run a t-test, comparing (between conditions: treatment and control) the number of words in comments written by participants. Save in dataframe "t.test_comments_words".
+t.test_comments_words <- t.test(data = data, total_words_in_comments ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE) 
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_comments_words".
+d_comments_words <- effsize::cohen.d(data = data, total_words_in_comments ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_comments_words$estimate,2), ",", " t = ", round(t.test_comments_words$statistic,2) , ",", " df = ", t.test_comments_words$parameter, ",", " P = ", round(t.test_comments_words$p.value,3))
+
+###############COMPARING NUMBER OF WORDS WRITTEN IN POSTS AND COMMENTS (POOLED)###############
+
+# Run a t-test, comparing (between conditions: treatment and control) the pooled number of words in posts and comments written by participants. Save in dataframe "t.test_written_words".
+t.test_written_words <- t.test(data = data, total_words_written ~ condition,
+        alternative = 'two.sided',
+        var.equal = TRUE)
+
+# Calculate the effect size (Cohen's d). Save in dataframe "d_written_words".
+d_written_words <- effsize::cohen.d(data = data, total_words_written ~ condition)
+
+# Final formatting pasting results together.
+paste0("d = ", round(d_written_words$estimate,2), ",", " t = ", round(t.test_written_words$statistic,2) , ",", " df = ", t.test_written_words$parameter, ",", " P = ", round(t.test_written_words$p.value,3))
+```
+
+# DISTRIBUTION OF BOT DETECTION.
+```{r DISTRIBUTION OF BOT DETECTION}
+# Create dataframe "control_bots" which calculates the proportion of bot detection in the control condition.
+control_bots <- data %>% 
+  filter(condition == "control") %>% # Filter for participants in the control condition.
+  count(bots) %>% # Count the number of participants who selected each bot detection response.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of bot detection responses.
+
+# Create column "Experimental Condition" which indicates the experimental condition.
+control_bots <- control_bots %>% 
+  mutate(`Experimental Condition` = "Control") # Experimental condition was control.
+
+# Create dataframe "treatment_bots" which calculates the proportion of bot detection in the treatment condition.
+treatment_bots <- data %>% 
+  filter(condition == "treat") %>% # Filter for participants in the treatment condition.
+  count(bots) %>% # Count the number of participants who selected each bot detection response.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of bot detection responses.
+
+# Create column "Experimental Condition" which indicates the experimental condition.
+treatment_bots <- treatment_bots %>% 
+  mutate(`Experimental Condition` = "Treatment") # Experimental condition was treatment.
+
+# Combine control_bots and treatment_bots into one dataframe "bot_detection".
+bot_detection <- rbind(control_bots, treatment_bots)
+
+# Create a bar chart which plots the proportion of bot detection responses in the control/treatment groups.
+ggplot(data=bot_detection, aes(x = proportion, y = bots, fill = `Experimental Condition`)) + # Define dataset, x, y and fill variables.
+  geom_bar(stat = "identity", position = "dodge") + # In the form of a bar chart, use the proportions defined in the dataset as the bar heights ("identity"), and stagger the bars ("dodge") so that treatment and control bars are next to each other.
+  theme_minimal() + # Select a minimal background for the bar chart.
+  ylab("Bots detected?") + # Label the y-axis.
+  xlab("Proportion of participant responses (%)") # Label the x-axis.
+```
+
+# BELIEF IN NO BOTS, ONE OR FEWER BOTS.
+```{r BELIEF IN NO BOTS, ONE OR FEWER BOTS}
+# Create dataframe "bot_belief" which calculates the proportion of participants' bot detection responses.
+bot_belief <- data %>% 
+  count(bots) %>% # Count the number of participants who selected each bot detection response.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of bot detection responses.
+
+# Identify the proportion of participants who believed they did not encounter bots.
+bot_belief$proportion[bot_belief$bots == "No, I did not encounter any bots"]
+
+# Calculate the proportion of participants who believed they encountered fewer than one or two bots.
+bot_belief$proportion[bot_belief$bots == "No, I did not encounter any bots"] + bot_belief$proportion[bot_belief$bots == "Yes, I encountered one or two bots"]
+```
+
+# FUTURE PLATFORM USE.
+```{r FUTURE PLATFORM USE}
+# Create dataframe "future_platform_use" which calculates the proportion of participants' future platform use responses.
+future_platform_use <- data %>% 
+  count(future_use) %>% # Count the number of participants who selected each future use response.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of future use responses.
+
+# Identify the proportion of participants who are at least somewhat likely to use the platform again.
+future_platform_use$proportion[future_platform_use$future_use == "Somewhat likely"] + future_platform_use$proportion[future_platform_use$future_use == "Very likely"]
+```

@@ -1,0 +1,301 @@
+---
+title: "SI.Table.14"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES. 
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(broom)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# STANDARDIZE VARIABLES.
+```{r STANDARDIZE VARIABLES}
+# Standardize panas.
+data <- data %>% 
+  mutate(panas = scale(panas))
+
+# Standardize panas_pos.
+data <- data %>% 
+  mutate(panas_pos = scale(panas_pos))
+
+# Standardize panas_neg.
+data <- data %>% 
+  mutate(panas_neg = scale(panas_neg))
+
+# Standardize delta_ih.
+data <- data %>% 
+  mutate(delta_ih = scale(delta_ih))
+
+# Standardize affective_polarization.
+data <- data %>% 
+  mutate(affective_polarization = scale(affective_polarization))
+
+# Standardize third_order.
+data <- data %>% 
+  mutate(third_order = scale(third_order))
+```
+
+# FORMAT DATA.
+```{r FORMAT DATA}
+# Create indicator which classifies if a participant exhibits high pre-treatment intellectual humility.
+data <- data %>% 
+  mutate(ih_indicator = pre_ih_binary) # In "Data Cleaning.Rmd", pre-treatment intellectual humility scores were averaged. A TRUE value was assigned if a participant's score was above the average (high pre-ih), and FALSE value was assigned if a participant's score was below the average (low pre-ih). Here, the variable that contains these scores "pre_ih_binary" is saved as "ih_indicator".
+```
+
+# RUN REGRESSIONS.
+```{r RUN REGRESSIONS}
+###############PANAS###############
+# Run regression, saving as "panas_model".
+panas_model <- lm(panas ~ condition * ih_indicator, # Effect of treatment and intellectual humility on panas.
+                      data = data) # Specify dataframe.
+
+# Save two summaries of the regression model.
+panas_model_summary <- tidy(panas_model) # Save the estimates, standard errors, and p-values.
+panas_model_statistics <- summary(panas_model) # Save the r^2 values, F-statistics, etc.
+
+###############PANAS POS###############
+# Run regression, saving as "panas_pos_model".
+panas_pos_model <- lm(panas_pos ~ condition * ih_indicator, # Effect of treatment and intellectual humility on panas_pos.
+                      data = data) # Specify dataframe.
+
+# Save two summaries of the regression model.
+panas_pos_model_summary <- tidy(panas_pos_model) # Save the estimates, standard errors, and p-values.
+panas_pos_model_statistics <- summary(panas_pos_model) # Save the r^2 values, F-statistics, etc.
+
+###############PANAS NEG###############
+# Run regression, saving as "panas_neg_model".
+panas_neg_model <- lm(panas_neg ~ condition * ih_indicator, # Effect of treatment and intellectual humility on panas_neg.
+                      data = data) # Specify dataframe.
+
+# Save two summaries of the regression model.
+panas_neg_model_summary <- tidy(panas_neg_model) # Save the estimates, standard errors, and p-values.
+panas_neg_model_statistics <- summary(panas_neg_model) # Save the r^2 values, F-statistics, etc.
+
+###############IH###############
+# Run regression, saving as "ih_model".
+ih_model <- lm(delta_ih ~ condition * ih_indicator, # Effect of treatment and intellectual humility on delta_ih.
+                      data = data) # Specify dataframe.
+
+# Save two summaries of the regression model.
+ih_model_summary <- tidy(ih_model) # Save the estimates, standard errors, and p-values.
+ih_model_statistics <- summary(ih_model) # Save the r^2 values, F-statistics, etc.
+
+###############AP###############
+# Run regression, saving as "ap_model".
+ap_model <- lm(affective_polarization ~ condition * ih_indicator, # Effect of treatment and intellectual humility on affective_polarization.
+                      data = data) # Specify dataframe.
+
+# Save two summaries of the regression model.
+ap_model_summary <- tidy(ap_model) # Save the estimates, standard errors, and p-values.
+ap_model_statistics <- summary(ap_model) # Save the r^2 values, F-statistics, etc.
+
+###############THIRD ORDER###############
+# Run regression, saving as "third_order_model".
+third_order_model <- lm(third_order ~ condition * ih_indicator, # Effect of treatment and intellectual humility on third_order.
+                      data = data) # Specify dataframe.
+
+# Save two summaries of the regression model.
+third_order_model_summary <- tidy(third_order_model) # Save the estimates, standard errors, and p-values.
+third_order_model_statistics <- summary(third_order_model) # Save the r^2 values, F-statistics, etc.
+```
+
+# FORMAT REGRESSION RESULTS - ESTIMATE, STD.ERROR, P-VALUE.
+```{r FORMAT REGRESSION RESULTS - ESTIMATE, STD.ERROR, P-VALUE}
+###############ADD IN OUTCOME COLUMN###############
+
+# Add a column "outcome" to panas_model_summary which contains the variable used in the regression ("panas").
+panas_model_summary$outcome <- "panas"
+
+# Add a column "outcome" to panas_pos_model_summary which contains the variable used in the regression ("panas_pos").
+panas_pos_model_summary$outcome <- "panas_pos"
+
+# Add a column "outcome" to panas_neg_model_summary which contains the variable used in the regression ("panas_neg").
+panas_neg_model_summary$outcome <- "panas_neg"
+
+# Add a column "outcome" to ih_model_summary which contains the variable used in the regression ("ih").
+ih_model_summary$outcome <- "ih"
+
+# Add a column "outcome" to ap_model_summary which contains the variable used in the regression ("ap").
+ap_model_summary$outcome <- "ap"
+
+# Add a column "outcome" to third_order_model_summary which contains the variable used in the regression ("third_order").
+third_order_model_summary$outcome <- "third_order"
+
+###############BIND DATAFRAMES TOGETHER###############
+
+# Bind the model summaries (estimates, standard errors, p-values) into one dataframe.
+summaries <- rbind(panas_model_summary, panas_pos_model_summary, panas_neg_model_summary, ih_model_summary, ap_model_summary, third_order_model_summary)
+
+###############FORMAT COLUMN VALUES###############
+
+# Add significance stars based on p-value.
+summaries <- summaries %>% 
+  mutate(stars = case_when(p.value <= 0.001 ~ '***', # If the p-value is equal to or below 0.001, then assign three stars.
+                           p.value <= 0.01 ~ '**', # If the p-value is equal to or below 0.01, then assign two stars.
+                           p.value <= 0.05 ~ '*', # If the p-value is equal to or below 0.05, then assign one star. 
+                          .default = ' '))
+
+# Round estimates and add significance stars.
+summaries <- summaries %>% 
+  mutate(estimate = paste(round(estimate, 3), stars)) # Round estimates to three decimal places, and paste in significance stars.
+
+# Round standard errors and add parentheses.
+summaries <- summaries %>% 
+  mutate(std.error = paste0("(", round(std.error, 3), ")")) # Round standard errors to three decimal places, and paste parentheses around the standard error values.
+
+###############PLACE STANDARD ERROR VALUES BELOW CORRESPONDING ESTIMATES###############
+
+# Duplicate every row.
+summaries <- summaries %>%
+  tidyr::uncount(2, .id = "id") # Create two of every row, and label if a row is a 1st or 2nd copy in column "id".
+
+# Add copy id to term column. This creates a unique marker for each row.
+summaries$term <- paste(summaries$term, summaries$id) # Paste together term column and id column.
+
+# Replace every other row in the estimate column with a blank. This ensures only one unique estimate per term category remains.
+summaries$estimate[seq(2, nrow(summaries), by = 2)] <- '' # Starting at row 2, replace estimate value with ' '. Do this every other row (by = 2) until the end of summaries is reached.
+
+# Replace every other row in the std.error column with a blank. This ensures only one unique estimate per term category remains.
+summaries$std.error[seq(1, nrow(summaries), by = 2)] <- '' # Starting at row 1, replace estimate value with ' '. Do this every other row (by = 2) until the end of summaries is reached.
+
+# Merge the estimate and std.error columns into a new column "combined_results".
+summaries$combined_results <- paste(summaries$estimate, summaries$std.error)
+
+# Reorganize the summaries dataframe.
+summaries <- summaries %>% 
+ pivot_wider(id_cols = c(term), names_from = outcome, values_from = c(combined_results)) # Identify observations using the column "term". The columns should be each outcome, and the values within the column should be taken from combined_results.
+
+###############REORDER ROWS###############
+
+# Reorder the rows of summaries, so that the rows containing the intercept estimates and standard errors are at the bottom of the dataframe.
+summaries <- rbind(summaries[-c(1,2), ], summaries[c(1,2), ]) # Intercept estimate is the first row, and intercept standard error is the second row. Take the rows out of the dataframe (summaries[-c(1,2), ]), and bind it to the bottom of the dataframe (summaries[c(1,2), ]).
+
+###############REFORMAT TERM COLUMN###############
+
+# Replace every other value in the term column with a blank. This ensures only one unique value per term category remains.
+summaries$term[seq(2, nrow(summaries), by = 2)] <- '' # Starting at row 2, replace estimate value with ' '. Do this every other row (by = 2) until the end of summaries is reached.
+
+# Rename the remaining values in the term column so that they are more readable.
+summaries$term[summaries$term =="conditiontreat 1"] <- "Treat" # Rename "conditiontreat 1" to "Treat".
+summaries$term[summaries$term =="ih_indicatorTRUE 1"] <- "High IH" # Rename "ih_indicatorTRUE 1" to "High IH".
+summaries$term[summaries$term =="conditiontreat:ih_indicatorTRUE 1"] <- "Treat*High IH" # Rename "conditiontreat:ih_indicatorTRUE 1" to "Treat*High IH".
+summaries$term[summaries$term =="(Intercept) 1"] <- "Constant" # Rename "(Intercept) 1" to "Constant".
+```
+
+# FORMAT REGRESSION RESULTS - OBSERVATIONS, R^2, ADJUSTED R^2, REDIS. STD. ERROR, F-STATISTIC.
+```{r FORMAT REGRESSION RESULTS - OBSERVATIONS, R^2, ADJUSTED R^2, REDIS. STD. ERROR, F-STATISTIC}
+###############COMBINE OBSERVATIONS, R^2, ADJUSTED R^2... FOR EACH VARIABLE###############
+
+# For the variable panas, combine number of observations, R^2 value, adjusted R^2 value, residual standard error, residual standard error degrees of freedom, F-statistic, F-statistic p-value, and F-statistic degrees of freedom into a vector "panas".
+panas <- c(nrow(data), panas_model_statistics$r.squared, panas_model_statistics$adj.r.squared, panas_model_statistics$sigma, panas_model_statistics$df[2], panas_model_statistics$fstatistic[1], pf(panas_model_statistics$fstatistic[1], panas_model_statistics$fstatistic[2], panas_model_statistics$fstatistic[3], lower.tail = FALSE), panas_model_statistics$fstatistic[c(2,3)]) # The F-statistic p-value can't be accessed directly from the summary. Instead, compute the p-value using the F-statistic (panas_model_statistics$fstatistic[1]), and degrees of freedom (panas_model_statistics$fstatistic[2], panas_model_statistics$fstatistic[3]).
+
+# For the variable panas_pos, combine number of observations, R^2 value, adjusted R^2 value, residual standard error, residual standard error degrees of freedom, F-statistic, F-statistic p-value, and F-statistic degrees of freedom into a vector "panas_pos".
+panas_pos <- c(nrow(data), panas_pos_model_statistics$r.squared, panas_pos_model_statistics$adj.r.squared, panas_pos_model_statistics$sigma, panas_pos_model_statistics$df[2], panas_pos_model_statistics$fstatistic[1], pf(panas_pos_model_statistics$fstatistic[1], panas_pos_model_statistics$fstatistic[2], panas_pos_model_statistics$fstatistic[3], lower.tail = FALSE), panas_pos_model_statistics$fstatistic[c(2,3)]) # The F-statistic p-value can't be accessed directly from the summary. Instead, compute the p-value using the F-statistic (panas_pos_model_statistics$fstatistic[1]), and degrees of freedom (panas_pos_model_statistics$fstatistic[2], panas_pos_model_statistics$fstatistic[3]).
+ 
+# For the variable panas_neg, combine number of observations, R^2 value, adjusted R^2 value, residual standard error, residual standard error degrees of freedom, F-statistic, F-statistic p-value, and F-statistic degrees of freedom into a vector "panas_neg".
+panas_neg <- c(nrow(data), panas_neg_model_statistics$r.squared, panas_neg_model_statistics$adj.r.squared, panas_neg_model_statistics$sigma, panas_neg_model_statistics$df[2], panas_neg_model_statistics$fstatistic[1], pf(panas_neg_model_statistics$fstatistic[1], panas_neg_model_statistics$fstatistic[2], panas_neg_model_statistics$fstatistic[3], lower.tail = FALSE), panas_neg_model_statistics$fstatistic[c(2,3)]) # The F-statistic p-value can't be accessed directly from the summary. Instead, compute the p-value using the F-statistic (panas_neg_model_statistics$fstatistic[1]), and degrees of freedom (panas_neg_model_statistics$fstatistic[2], panas_neg_model_statistics$fstatistic[3]).
+
+# For the variable ih, combine number of observations, R^2 value, adjusted R^2 value, residual standard error, residual standard error degrees of freedom, F-statistic, F-statistic p-value, and F-statistic degrees of freedom into a vector "ih".
+ih <- c(nrow(data), ih_model_statistics$r.squared, ih_model_statistics$adj.r.squared, ih_model_statistics$sigma, ih_model_statistics$df[2], ih_model_statistics$fstatistic[1], pf(ih_model_statistics$fstatistic[1], ih_model_statistics$fstatistic[2], ih_model_statistics$fstatistic[3], lower.tail = FALSE), ih_model_statistics$fstatistic[c(2,3)]) # The F-statistic p-value can't be accessed directly from the summary. Instead, compute the p-value using the F-statistic (ih_model_statistics$fstatistic[1]), and degrees of freedom (ih_model_statistics$fstatistic[2], ih_model_statistics$fstatistic[3]).
+
+# For the variable ap, combine number of observations, R^2 value, adjusted R^2 value, residual standard error, residual standard error degrees of freedom, F-statistic, F-statistic p-value, and F-statistic degrees of freedom into a vector "ap".
+ap <- c(length(na.omit(data$affective_polarization)), ap_model_statistics$r.squared, ap_model_statistics$adj.r.squared, ap_model_statistics$sigma, ap_model_statistics$df[2], ap_model_statistics$fstatistic[1], pf(ap_model_statistics$fstatistic[1], ap_model_statistics$fstatistic[2], ap_model_statistics$fstatistic[3], lower.tail = FALSE), ap_model_statistics$fstatistic[c(2,3)]) # The F-statistic p-value can't be accessed directly from the summary. Instead, compute the p-value using the F-statistic (ap_model_statistics$fstatistic[1]), and degrees of freedom (ap_model_statistics$fstatistic[2], ap_model_statistics$fstatistic[3]).
+
+# For the variable third_order, combine number of observations, R^2 value, adjusted R^2 value, residual standard error, residual standard error degrees of freedom, F-statistic, F-statistic p-value, and F-statistic degrees of freedom into a vector "third_order". 
+third_order <- c(nrow(data), third_order_model_statistics$r.squared, third_order_model_statistics$adj.r.squared, third_order_model_statistics$sigma, third_order_model_statistics$df[2], third_order_model_statistics$fstatistic[1], pf(third_order_model_statistics$fstatistic[1], third_order_model_statistics$fstatistic[2], third_order_model_statistics$fstatistic[3], lower.tail = FALSE),third_order_model_statistics$fstatistic[c(2,3)]) # The F-statistic p-value can't be accessed directly from the summary. Instead, compute the p-value using the F-statistic (third_order_model_statistics$fstatistic[1]), and degrees of freedom (third_order_model_statistics$fstatistic[2], third_order_model_statistics$fstatistic[3]).
+
+###############BIND VECTORS TOGETHER###############
+
+# Create dataframe "statistics" which contains the number of observations, R^2 value, adjusted R^2 value, residual standard error, residual standard error degrees of freedom, F-statistic, F-statistic p-value, and F-statistic degrees of freedom for each outcome variable.
+statistics <- as.data.frame(rbind(panas, panas_pos, panas_neg, ih, ap, third_order)) # Bind dataframes together.
+
+###############FORMAT DATAFRAME###############
+
+# Rename column "value.1", which is the 7th column, to "p.value".
+colnames(statistics)[7] <- "p.value"
+
+# Add significance stars based on p-value.
+statistics <- statistics %>% 
+  mutate(stars = case_when(p.value <= 0.001 ~ '***', # If the p-value is equal to or below 0.001, then assign three stars.
+                           p.value <= 0.01 ~ '**', # If the p-value is equal to or below 0.01, then assign two stars.
+                           p.value <= 0.05 ~ '*', # If the p-value is equal to or below 0.05, then assign one star. 
+                          .default = ' '))
+
+# Round all values to three decimal places.
+statistics <- statistics %>%
+  mutate(across(where(is.numeric), round, 3)) # For every value in the statistics dataframe that is numeric, round the value to three decimal places.
+
+# Combine significance stars with F-statistics.
+statistics <- statistics %>%
+  mutate(value = paste(value, stars)) # F-statistics are contained in the column "value". Paste together F-statistics and significance stars.
+
+# Paste together the two F-statistic degrees of freedom.
+statistics <- statistics %>% 
+  mutate(F_df = paste0("(", numdf, ";", dendf, ")"))
+
+# Delete significance stars, p-value, and extra F-statistic degrees of freedom columns.
+statistics <- statistics %>% 
+  dplyr::select(-c(stars, p.value, numdf, dendf))
+
+# Convert all columns in the statistics dataframe to character columns. This is necessary in order to later combine the summaries and statistics dataframes.
+statistics <- statistics %>%
+  mutate(across(everything(), as.character)) # Convert all columns to character.
+
+# Reorganize table, switching rows for columns and columns for rows.
+statistics <- as.data.frame(t(statistics)) # The t() function is used to switch rows and columns.
+
+# Create column "term" which contains the name of each statistic value in the dataframe.
+statistics <- statistics %>%
+  add_column(term = c("Observations", "R^2", "Adjusted R^2", "Resid. Std. Error", "Resid. Std. Error df", "F Statistic", "F Statistic df"))
+```
+
+# BIND REGRESSION RESULTS, TABLE FORMATTING.
+```{r BIND REGRESSION RESULTS, TABLE FORMATTING}
+# Create "table14" which contains the regression results contained in the summaries dataframe (estimates, standard errors, p-values) and the regression results contained in the statistics dataframe (number of observations, R^2 value, adjusted R^2 value, residual standard error, residual standard error degrees of freedom, F-statistic, and F-statistic degrees of freedom).
+table14 <- rbind(summaries, statistics) 
+
+# Rename the columns to be more readable.
+table14 <- table14 %>% 
+  rename(
+     ` ` = term, # Rename term as " ".
+    `(PANAS)` = panas, # Rename panas as "(PANAS)".
+    `(PANAS Pos)` = panas_pos, # Rename panas_neg as "(PANAS Pos)".
+    `(PANAS Neg)` = panas_neg, # Rename panas_neg as "(PANAS Neg)".
+    `(IH)` = ih, # Rename ih as "(IH)".
+    `(AP)` = ap, # Rename ap as "(AP)".
+    `(3rd order)` = third_order) # Rename third_order as "(3rd order)".
+
+# Delete row names.
+rownames(table14) <- NULL
+```
+
+# FINAL TABLE.
+```{r FINAL TABLE}
+print(table14)
+
+library(knitr)
+library(kableExtra)
+
+kable(table14, format = "latex", booktabs = TRUE, escape = FALSE,
+      align = c("l", rep("c", ncol(table14) - 1)),
+      caption = "Regression Results") %>%
+  kable_styling(latex_options = c("hold_position"),
+                font_size = 10, position = "center", full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, hline_after = FALSE) %>%  # Header row
+  row_spec(1:nrow(table14), hline_after = FALSE)
+
+```

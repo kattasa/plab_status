@@ -1,0 +1,37 @@
+---
+title: "SI.Section.2"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+```
+
+# 2.1 OUTCOME MEASURES.
+```{r OUTCOME MEASURES }
+# Number of users who did not author any posts or comments.
+data %>% 
+  filter(num_comments == 0) %>% # If number of comments (num_comments) = 0, then the participant did not author any comments.
+  filter(num_posts == 0) %>% # If number of posts (num_posts) = 0, then the participant did not author any posts.
+  nrow() # Count the number of participants (1 row = 1 unique participant) who did not author any posts or comments.
+
+# Range of intellectually humble engagement.
+range(data$ih_engagement)
+
+# Number of participants who identify as political independents.
+sum(data$pid7 == "Pure Independent") # Count the number of participants who identify as "Pure Independent".
+```

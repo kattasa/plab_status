@@ -1,0 +1,81 @@
+---
+title: "SI.Section.1"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/data_cleaned.csv') # Read csv data file.
+
+# Create dataframe "data_with_pure_control" which contains cleaned participant data with pure controls.
+data_with_pure_control <- read_csv('../Data/data_with_pure_control_cleaned.csv') # Read csv data file.
+```
+
+# 1 STUDY POPULATION.
+```{r STUDY POPULATION}
+# Number of total participants in dataframe with pure controls.
+length(unique(data_with_pure_control$participant_code)) # Count the number of unique participant codes.
+
+# Number of total participants in dataframe without pure controls
+length(unique(data$participant_code)) # Count the number of unique participant codes.
+```
+
+# 1.1 MISSING DATA.
+```{r MISSING DATA}
+# Find the number of participants who identified as pure independents.
+sum(data$pid7 == "Pure Independent") # Count the number of participants who identified as "Pure Independent".
+```
+
+# 1.2 DEMOGRAPHIC CHARACTERISTICS.
+```{r DEMOGRAPHIC CHARACTERISTICS}
+# Proportions of participant racial identities.
+data %>%
+  count(race_new) %>% # Count the number of participants who identified with each race.
+  mutate(proportion = prop.table(n)*100) %>% # Calculate the proportion of participants who identify with each race.
+  mutate(proportion = round(proportion, 0)) # Round proportions to 0 decimal places.
+
+# Proportions of participant educational backgrounds.
+data %>%
+  count(educ_new) %>% # Count the number of participants who selected each education level.
+  mutate(proportion = prop.table(n)*100) %>% # Calculate the proportion of participants who hold each educational background.
+  mutate(proportion = round(proportion, 0)) # Round proportions to 0 decimal places.
+
+# Proportions of participant political identity.
+data %>%
+  count(pid3) %>% # Count the number of participants who identified with each political identity.
+  mutate(proportion = prop.table(n)*100) %>%  # Calculate the proportion of participants who identify with each political identity.
+  mutate(proportion = round(proportion, 0)) # Round proportions to 0 decimal places.
+
+# Proportions of participant political ideology.
+political_ideology <- data %>%
+  count(ideo7) %>% # Count the number of participants who identified with each political ideology.
+  mutate(proportion = prop.table(n)*100) # Calculate the proportion of participants who identify with each political ideology.
+
+# Proportion of participants who identify left of moderate.
+round(sum(political_ideology$proportion[political_ideology$ideo7 %in% c("Somewhat liberal", "Liberal", "Extremely liberal")]), 0) #Add the proportions, calculated above in political_ideology, of participants who identify as "Somewhat liberal", "Liberal", and "Extremely liberal". Round the sum to 0 decimal places.
+
+# Proportion of participants who identify as moderate.
+round(political_ideology$proportion[political_ideology$ideo7 == "Moderate or middle of the road"], 0) # Select the proportion of individuals who identify as moderate, and round the proportion to 0 decimal places.
+
+# Proportion of participants who identify right of moderate.
+round(sum(political_ideology$proportion[political_ideology$ideo7 %in% c("Somewhat conservative", "Conservative", "Extremely conservative")]), 0) # Add the proportions, calculated above in political_ideology, of participants who identify as "Somewhat conservative", "Conservative", and "Extremely conservative". Round the sum to 0 decimal places.
+
+# Mean age of participants.
+round(mean(data$age), 1) # Mean age, rounded to 1 decimal place.
+
+# Range of participants' ages.
+range(data$age)
+```
