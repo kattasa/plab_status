@@ -72,3 +72,38 @@ table7 <- table7[c(" ", "Very unlikely", "Somewhat unlikely", "Neither unlikely 
 print(table7)
 stargazer::stargazer(table7, rownames = FALSE, summary = FALSE)
 ```
+
+
+# FINAL TEST STATISTIC
+```{r FINAL TEST STATISTIC}
+# Cohen's d with pooled SD (classic, equal-variance pooling)
+cohen_d <- function(x, y) {
+  x <- x[!is.na(x)]; y <- y[!is.na(y)]
+  nx <- length(x); ny <- length(y)
+  sp <- sqrt(((nx - 1) * var(x) + (ny - 1) * var(y)) / (nx + ny - 2))
+  (mean(x) - mean(y)) / sp
+}
+ 
+
+y_tx <- data[data$condition == 'treat', ]$future_use_numeric >= 3
+y_ct <- data[data$condition == 'control', ]$future_use_numeric >= 3
+tt <- t.test(y_tx, y_ct)               # Welch's t-test (unequal variances)
+
+outcome <- 'future_use'
+n_yes <- sum(!is.na(y_tx))
+n_no <- sum(!is.na(y_ct))
+mean_yes <- mean(y_tx, na.rm = TRUE)
+mean_no <- mean(y_ct, na.rm = TRUE)
+d <- cohen_d(y_tx, y_ct)
+t <- unname(tt$statistic)
+df <- unname(tt$parameter)
+p <- tt$p.value
+
+cat('We tested whether participants in the treated condition were more likely than those in the control condition to report being "somewhat likely" or "very likely" to use the platform again. Using a two-sided Welch\'s t-test,  we found that $',round(mean_yes*100, 0),'\\%$ of participants in the treated group were likely to use the platform again compared to only $', round(mean_no*100, 0), '\\% $ of subjects in the control group $(d=', round(d, 3), 
+', t = ', round(t, 3),
+',df = ', round(df, 3), 
+',P = ', round(p, 3), ')$')
+
+
+
+```

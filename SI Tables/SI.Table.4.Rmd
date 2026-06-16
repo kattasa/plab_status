@@ -10,7 +10,7 @@ output:
 ```{r setup, include=FALSE}
 rm(list = ls())
 library(tidyverse)
-
+library(peRspective)
 theme_set(theme_bw() + theme(text = element_text(size = 15)))
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -18,7 +18,54 @@ knitr::opts_chunk$set(echo = TRUE)
 # LOAD IN DATA.
 ```{r LOAD IN DATA}
 # Create dataframe "data" which contains cleaned participant data without pure controls.
-data <- read_csv('../Data/original_posts.csv') #read csv data file.
+data <- read_csv('../Data/original_posts_scored.csv') #read csv data file.
 ```
 
+
 # FORMAT DATA.
+```{r FORMAT DATA}
+# compute humility score as average of 3 perspective scores
+data <- data %>% mutate(humility = (nuance + curiosity + respect) / 3)
+```
+
+# COMPARE HUMBLE AND NOT HUMBLE POSTS
+```{r COMPARE HUMBLE AND NOT HUMBLE POSTS}
+
+# Cohen's d with pooled SD (classic, equal-variance pooling)
+cohen_d <- function(x, y) {
+  x <- x[!is.na(x)]; y <- y[!is.na(y)]
+  nx <- length(x); ny <- length(y)
+  sp <- sqrt(((nx - 1) * var(x) + (ny - 1) * var(y)) / (nx + ny - 2))
+  (mean(x) - mean(y)) / sp
+}
+ 
+
+y_hi <- data[data$High_IH == "Yes", ]$humility
+y_no <- data[data$High_IH == "No", ]$humility
+tt <- t.test(y_hi, y_no)               # Welch's t-test (unequal variances)
+results <- data.frame(
+  outcome = 'humility',
+  n_yes   = sum(!is.na(y_hi)),
+  n_no    = sum(!is.na(y_no)),
+  mean_yes = mean(y_hi, na.rm = TRUE),
+  mean_no  = mean(y_no, na.rm = TRUE),
+  d  = cohen_d(y_hi, y_no),
+  t  = unname(tt$statistic),
+  df = unname(tt$parameter),
+  p  = tt$p.value
+)
+
+cat('High IH posts had an average humility rating of', round(results$mean_yes, 3), 'while the remaining posts had an average humility rating of', round(results$mean_no, 3), 
+'. Results were statistically significantly different according to a Welch\'s two-sample',
+'t-test ($d = ', 
+        round(results$d, 3), 
+        ', t = ', 
+        round(results$t, 3), 
+        ', df = ', 
+        round(results$df, 3),
+        ', P < 0.001.$)'
+)
+ 
+
+```
+
