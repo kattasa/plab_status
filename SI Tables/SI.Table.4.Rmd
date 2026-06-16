@@ -1,0 +1,24 @@
+---
+title: "SI.Table.3"
+author: "Austin van Loon and Srikar Katta"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown
+---
+
+# LOADING PACKAGES.
+```{r setup, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+
+theme_set(theme_bw() + theme(text = element_text(size = 15)))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# LOAD IN DATA.
+```{r LOAD IN DATA}
+# Create dataframe "data" which contains cleaned participant data without pure controls.
+data <- read_csv('../Data/original_posts.csv') #read csv data file.
+```
+
+# FORMAT DATA.
